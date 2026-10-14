@@ -1,0 +1,39 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: iio-sensor-proxy
+Upstream-Contact: Bastien Nocera <hadess@hadess.net>
+Source: https://gitlab.freedesktop.org/hadess/iio-sensor-proxy
+
+Files: *
+Copyright: 2014-2024 Bastien Nocera <hadess@hadess.net>
+License: GPL-3.0-or-later
+ This program is free software: you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation, either version 3 of the License, or (at your option) any later
+ version.
+ .
+ This program is distributed in the hope that it will be useful, but WITHOUT
+ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ .
+ On Debian systems the full text of the GNU General Public License version 3
+ can be found in /usr/share/common-licenses/GPL-3.
+Comment:
+ COPYING is the GPL-3 text and meson.build declares the project as GPLv3+,
+ although individual source headers only say "version 3" and the Debian package
+ of 3.7 still states GPL-2.
+
+Files: src/uinput.h
+Copyright: Marcel Holtmann <marcel@holtmann.org>
+License: GPL-2.0-or-later
+ This program is free software; you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation; either version 2 of the License, or (at your option) any later
+ version.
+ .
+ On Debian systems the full text of the GNU General Public License version 2
+ can be found in /usr/share/common-licenses/GPL-2.
+
+Files: debian/*
+Copyright: 2026 GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+License: GPL-3.0-or-later
+ Same license as the upstream program.

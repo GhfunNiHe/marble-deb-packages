@@ -1,0 +1,48 @@
+#!/usr/bin/make -f
+
+PKG    = firmware-redmi-marble
+FW     = /usr/lib/firmware
+MARBLE = $(FW)/qcom/sm8475/xiaomi/marble
+DEST   = debian/$(PKG)
+
+%:
+	dh $@
+
+# Pure data package: no upstream buildsystem, no tests.
+override_dh_auto_configure:
+override_dh_auto_build:
+override_dh_auto_test:
+
+# strip-nondeterminism is missing on the Fedora dev host; the blobs are
+# opaque signed binaries and must be shipped byte-for-byte anyway.
+override_dh_strip_nondeterminism:
+
+override_dh_auto_install:
+	install -Dm644 marble/a730_zap.mbn \
+		marble/adsp2.* marble/adspr.jsn marble/adspua.jsn \
+		marble/battmgr.jsn marble/cdspr.jsn marble/aw88261_acf.bin \
+		-t $(DEST)$(MARBLE)
+	install -Dm644 marble/modem.* marble/modemr.jsn marble/ipa_fws.* \
+		-t $(DEST)$(MARBLE)
+	cp -a marble/modem_pr $(DEST)$(MARBLE)/
+	install -Dm644 marble/slpi2.* marble/slpir.jsn marble/slpius.jsn \
+		-t $(DEST)$(MARBLE)
+
+	install -Dm644 generic/qcom/a730_sqe.fw generic/qcom/gmu_gen70000.bin \
+		-t $(DEST)$(FW)/qcom
+	install -Dm644 generic/qcom/vpu/* -t $(DEST)$(FW)/qcom/vpu
+	install -Dm644 generic/SM8475-Xiaomi-Marble-tplg.bin \
+		-t $(DEST)$(FW)/qcom/sm8450
+
+	# btqca wants qca/wcnhpbtfw21.tlv on WCN6855, upstream only ships the
+	# qca/hp* name. Keep the "hp" -> wcnhpbtfw21.tlv, not wcnbtfw21.tlv.
+	install -Dm644 generic/qca/hp* -t $(DEST)$(FW)/qca
+	for f in $(DEST)$(FW)/qca/hp*; do \
+		ln -sf "$${f##*/}" "$${f%/*}/wcn$${f##*/}"; \
+	done
+
+	mkdir -p $(DEST)$(FW)/ath11k
+	cp -a generic/ath11k/WCN6855 $(DEST)$(FW)/ath11k/
+
+	mkdir -p $(DEST)/usr/share/qcom
+	cp -a hexagonfs $(DEST)/usr/share/qcom/

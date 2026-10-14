@@ -1,0 +1,14 @@
+Test-Command: qmicli --help
+Restrictions: superficial
+Depends:
+ libqmi-utils,
+
+Test-Command: qmi-firmware-update --help
+Restrictions: superficial
+Depends:
+ libqmi-utils,
+
+Test-Command: pkgconf --libs --cflags qmi-glib
+Restrictions: superficial
+Depends: pkgconf,
+ libqmi-glib-dev,

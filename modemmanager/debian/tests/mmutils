@@ -1,0 +1,36 @@
+#!/bin/bash
+set -e
+
+meson setup debian/build
+cd debian/build
+meson compile mmsmspdu mmrules mmsmsmonitor #lsudev mmtty
+
+# run some ModemManager utils, linking the system version of libmm-glib.so
+LIBMM="/usr/lib/$(dpkg-architecture -q DEB_HOST_MULTIARCH)/libmm-glib.so"
+
+# SMSPDU
+PDU="0391242411000A8110325476980000FF13C8329BFD0635DFE472BB197687CF657908"
+LD_PRELOAD="$LIBMM" test/mmsmspdu -v -p $PDU > output.txt
+cat output.txt
+grep "text: Hello ModemManager!" output.txt
+grep "number: 0123456789" output.txt
+grep "encoding: GSM7" output.txt
+grep "smsc: +4242" output.txt
+
+# confirm MM_CANDIDATE udev rules are properly installed
+# NB: We need a properly working udev to execute this test, which is not
+#     not available in LXC containers (such as DebCI).
+if [[ $(systemctl is-active systemd-udevd.service) == "active" ]]; then
+  LD_PRELOAD="$LIBMM" test/mmrules -v -p /usr/lib/udev/rules.d/
+else
+  echo "SKIP: 'mmrules' due to inactive udev ..."
+fi
+
+# connect to ModemManager.service, listening for incoming SMS
+# NB: We will not receive anything, but can make sure the service is running
+#     properly and we can connect through the expected interfaces.
+source ../tests/launch-mm.sh
+
+# listen to smsmonitor for 2 sec
+LD_PRELOAD="$LIBMM" test/mmsmsmonitor 2>&1 & pid=$!
+sleep 2 && kill -HUP $pid 2>&1

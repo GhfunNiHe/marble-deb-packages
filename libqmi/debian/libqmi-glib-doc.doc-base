@@ -1,0 +1,9 @@
+Document: libqmi
+Title: Debian libqmi Manual
+Author: The libqmi-glib authors
+Abstract: API documentation of libqmi-glib.
+Section: Programming/C
+
+Format: HTML
+Index: /usr/share/doc/libqmi-glib-doc/libqmi-glib-1.0/index.html
+Files: /usr/share/doc/libqmi-glib-doc/libqmi-glib-1.0/*.html

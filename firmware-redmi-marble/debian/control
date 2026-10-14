@@ -1,0 +1,36 @@
+Source: firmware-redmi-marble
+Section: kernel
+Priority: optional
+Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+Build-Depends:
+ debhelper-compat (= 13),
+Standards-Version: 4.6.2
+Homepage: https://github.com/iLtanaka/firmware-xiaomi-marble
+Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
+Rules-Requires-Root: no
+
+Package: firmware-redmi-marble
+Architecture: all
+Depends: ${misc:Depends}
+Recommends: linux-redmi-marble
+Breaks: firmware-xiaomi-marble
+Replaces: firmware-xiaomi-marble
+Provides: firmware-xiaomi-marble (= ${source:Version})
+Description: Firmware for Xiaomi POCO F5 / Redmi Note 12 Turbo (marble)
+ Proprietary signed firmware blobs for the marble mainline Linux port:
+ ADSP, SLPI, modem and IPA, Adreno 725 (zap / SQE / GMU), Iris VPU,
+ WCN6855 Wi-Fi (ath11k board files) and Bluetooth, audio topology and
+ speaker amplifier tuning, and the hexagonrpcd sensor registry.
+ .
+ Install paths follow the postmarketOS firmware-xiaomi-marble aport,
+ adapted to UsrMerge: /usr/lib/firmware/qcom/sm8475/xiaomi/marble,
+ /usr/lib/firmware/qcom, /usr/lib/firmware/ath11k and
+ /usr/lib/firmware/qca, plus /usr/share/qcom/hexagonfs.
+ .
+ btqca asks for the wcn-prefixed Bluetooth names on WCN6855
+ (drivers/bluetooth/btqca.c: "qca/wcnhpbtfw%02x.tlv" and "wcnhpnv..."),
+ while the upstream tree only ships qca/hp*. debian/rules creates those
+ links, which is the only place the names are adapted.
+ .
+ Proprietary firmware (c) Qualcomm Technologies, Inc. and Xiaomi Inc.
+ Device redistribution only.

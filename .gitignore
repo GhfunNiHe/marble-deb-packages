@@ -1,0 +1,6 @@
+out/
+*.deb
+*.buildinfo
+*.changes
+AGENTS.md
+.tools/

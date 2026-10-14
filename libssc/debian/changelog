@@ -1,0 +1,20 @@
+libssc (0.4.0-1) unstable; urgency=medium
+
+  * Initial Debian packaging of libssc 0.4.0
+    (codeberg.org/DylanVanAssche/libssc), the Qualcomm Sensor Core library
+    that iio-sensor-proxy builds against with -Dssc-support=enabled. Debian
+    and Ubuntu do not ship libssc at all, so their iio-sensor-proxy silently
+    builds without SSC support.
+  * One binary package, as in sheng_fedora_packages/libssc: upstream installs
+    libssc.so.2, ssccli, the public headers and libssc.pc unconditionally, and
+    the headers/pc are what the iio-sensor-proxy build needs.
+  * debian/patches/wait-for-qmi-service.patch: retry the QRTR node lookup for
+    the SSC service for a few seconds. The DSP side publishes that service a
+    few seconds into the boot, and this rootfs has no initramfs to order
+    against, so the single-shot lookup loses the race and iio-sensor-proxy
+    then exits with "No sensors or missing kernel drivers" until something
+    restarts it.
+  * Tests are skipped: upstream's suite runs the library against a Python
+    mock QRTR server, which is not part of the shipped library.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 01:27:00 +0800

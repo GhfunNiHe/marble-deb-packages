@@ -1,0 +1,13 @@
+[connection]
+id=ct-data
+type=gsm
+autoconnect=false
+
+[gsm]
+apn=ctlte
+
+[ipv4]
+method=auto
+
+[ipv6]
+method=auto

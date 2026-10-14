@@ -1,0 +1,28 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+
+export DPKG_GENSYMBOLS_CHECK_LEVEL=4
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+DOPACKAGES=$(shell dh_listpackages)
+
+%:
+	dh $@ --with gir
+
+ifneq (,$(filter libqmi-glib-doc,$(DOPACKAGES)))
+CONFIGURE_FLAGS += -Dgtk_doc=true
+else
+CONFIGURE_FLAGS += -Dgtk_doc=false
+endif
+
+override_dh_auto_configure:
+	dh_auto_configure -- -Ddefault_library=both $(CONFIGURE_FLAGS)
+
+override_dh_missing:
+	dh_missing -X.la
+
+override_dh_installexamples:
+	dh_installexamples -XMakefile
+
+override_dh_makeshlibs:
+	dh_makeshlibs -V1.39.1

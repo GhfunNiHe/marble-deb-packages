@@ -1,0 +1,26 @@
+Test-Command: mmcli --help
+Restrictions: superficial
+Depends:
+ modemmanager,
+
+Test-Command: /usr/sbin/ModemManager --help
+Restrictions: superficial
+Depends:
+ modemmanager,
+
+Test-Command: pkgconf --libs --cflags mm-glib
+Restrictions: superficial
+Depends: pkgconf,
+ libmm-glib-dev,
+
+Tests: smoke
+Depends: @
+Restrictions: needs-sudo, breaks-testbed, superficial
+
+Tests: unittests
+Depends: @, @builddeps@
+Restrictions: needs-sudo, breaks-testbed
+
+Tests: mmutils
+Depends: @, @builddeps@, dpkg-dev
+Restrictions: needs-sudo, breaks-testbed

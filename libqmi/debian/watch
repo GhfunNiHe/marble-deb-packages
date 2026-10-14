@@ -1,0 +1,5 @@
+Version: 5
+
+Template: Gitlab
+Dist: https://gitlab.freedesktop.org/mobile-broadband/@PACKAGE@
+Matching-Pattern: .*(\d+\.\d[02468](\.\d*)?(\-(alpha|beta|rc))?\d*)

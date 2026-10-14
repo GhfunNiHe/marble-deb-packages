@@ -1,0 +1,151 @@
+name: Build Kernel Deb
+
+# Standalone kernel build, manual trigger only. The kernel takes 30-90 min
+# even with a warm ccache — far heavier than marble-device-support alone — so
+# it gets its own workflow, mirroring sheng_fedora_packages/build-kernel.yml.
+#
+# Same layout contract as build-marble-debs.yml: vmlinuz (uncompressed Image)
+# + DTB in /boot, no initramfs. postinst syncs both to the ESP when /boot/efi
+# is mounted — mounting it is the caller's job (CI loop-mounts esp.img before
+# dpkg -i; on the device fstab mounts PARTLABEL=esp there).
+
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: 'Publish as a prerelease (untick to publish a full release)'
+        type: boolean
+        default: true
+
+# Kernel rebuilds supersede each other; never queue them up.
+concurrency:
+  group: build-kernel-deb-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build kernel DEB
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    container:
+      image: debian:trixie
+
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential debhelper fakeroot dpkg-dev ccache git ca-certificates wget \
+            bc bison flex libssl-dev libelf-dev dwarves \
+            rsync cpio kmod python3 zstd xz-utils lz4 \
+            clang lld llvm
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup work dirs
+        run: mkdir -p "$RUNNER_TEMP/build" "$GITHUB_WORKSPACE/out"
+
+      - name: Restore ccache
+        uses: actions/cache@v6
+        with:
+          path: ~/.ccache
+          key: ccache-linux-redmi-marble-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('linux-redmi-marble/debian/rules', 'linux-redmi-marble/config-xiaomi-marble.aarch64') }}
+          restore-keys: |
+            ccache-linux-redmi-marble-${{ runner.os }}-${{ runner.arch }}-
+            ccache-linux-redmi-marble-
+
+      - name: Download upstream source
+        run: |
+          wget -c -q -O "$RUNNER_TEMP/build/linux-marble.tar.gz" \
+            "https://github.com/iLtanaka/linux-marble/archive/refs/heads/main/linux-marble.tar.gz"
+          tar -xf "$RUNNER_TEMP/build/linux-marble.tar.gz" -C "$RUNNER_TEMP/build"
+
+      - name: Overlay debian/ and configs
+        run: |
+          SRC="$RUNNER_TEMP/build/linux-marble-main"
+          cp -a linux-redmi-marble/debian "$SRC/debian"
+          cp linux-redmi-marble/config-xiaomi-marble.aarch64 "$SRC/"
+
+      - name: Build kernel
+        run: |
+          mkdir -p ~/.ccache
+          cd "$RUNNER_TEMP/build/linux-marble-main"
+          dpkg-buildpackage -b -us -uc
+          echo "=== ccache stats ==="
+          ccache --show-stats
+
+          KREL=$(cat include/config/kernel.release)
+          echo "KREL=$KREL" >> "$GITHUB_ENV"
+          cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
+          {
+            echo "### Kernel build result"
+            echo ""
+            echo "- kernel release: \`${KREL}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # /boot must be exactly the two files the boot chain reads, and vmlinuz
+      # must be the uncompressed arm64 Image (U-Boot booti cannot load a
+      # gzip/zstd image). Assert it on the deliverable, not on the build tree.
+      - name: Verify kernel DEB
+        run: |
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/linux-redmi-marble_*.deb | head -1)
+          [ -n "$DEB" ] || { echo "FAIL: no kernel deb built"; exit 1; }
+          dpkg-deb -f "$DEB" Package Version Architecture Depends
+
+          BOOT=$(dpkg-deb -c "$DEB" | awk '{print $6}' | grep '^\./boot/[^/]*$' | sort)
+          EXPECT=$(printf './boot/sm8475-xiaomi-marble-%s.dtb\n./boot/vmlinuz-%s\n' "$KREL" "$KREL")
+          if [ "$BOOT" != "$EXPECT" ]; then
+            echo "FAIL: /boot contents are not vmlinuz + DTB only"
+            diff <(echo "$BOOT") <(echo "$EXPECT") || true
+            exit 1
+          fi
+
+          dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify"
+          if ! file "$RUNNER_TEMP/verify/boot/vmlinuz-$KREL" | grep -q 'ARM64 boot executable Image'; then
+            echo "FAIL: vmlinuz is not an uncompressed arm64 Image"; exit 1
+          fi
+          echo "kernel deb verified: $DEB"
+
+      - name: Upload DEB
+        uses: actions/upload-artifact@v7
+        with:
+          name: marble-kernel-deb-${{ env.KREL }}
+          path: out/**/*.deb
+          retention-days: 90
+          if-no-files-found: error
+
+  # ==================================================================
+  # Publish the kernel DEB as a GitHub release: a prerelease when the
+  # `prerelease` input is ticked (the default), a full release otherwise.
+  # Re-running with a different choice updates the existing kernel-deb-<sha>
+  # release in place, which doubles as the prerelease -> release promotion.
+  # ==================================================================
+  release:
+    name: Create release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Get short commit SHA
+        run: echo "SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: marble-kernel-deb-*
+          merge-multiple: true
+          path: debs
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: kernel-deb-${{ env.SHORT_SHA }}
+          name: Kernel linux-redmi-marble (${{ env.SHORT_SHA }})
+          files: debs/**/*.deb
+          prerelease: ${{ inputs.prerelease }}
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

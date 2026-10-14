@@ -1,0 +1,34 @@
+#!/usr/bin/make -f
+
+export DPKG_GENSYMBOLS_CHECK_LEVEL=4
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+
+ifeq ($(filter libmm-glib-doc,$(shell dh_listpackages)),)
+configure_flags += -Dgtk_doc=false
+else
+configure_flags += -Dgtk_doc=true
+endif
+
+%:
+	dh $@ --with gir --buildsystem=meson
+
+# Although meson is the preferred build system, autotools files are still present,
+# leading dh_autoreconf to execute anyway, which is useless.
+override_dh_autoreconf:
+
+override_dh_auto_configure:
+	dh_auto_configure -- $(configure_flags) \
+		-Ddbus_policy_dir=/usr/share/dbus-1/system.d \
+		-Dpolkit=permissive \
+		-Dvapi=true
+
+override_dh_install:
+	rmdir $(CURDIR)/debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/ModemManager/fcc-unlock.d
+	dh_install
+
+execute_after_dh_builddeb-indep:
+	# Confirm that the DEP-8 patch still applies to new upstream versions,
+	# before running into autopkgtest failures.
+	patch -p1 < debian/tests/0001-Test-running-service-in-plugin-generic.patch

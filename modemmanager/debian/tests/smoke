@@ -1,0 +1,7 @@
+#!/bin/bash
+set -e
+
+source debian/tests/launch-mm.sh
+
+mmcli -B  # log MM version
+mmcli -L  # query modems

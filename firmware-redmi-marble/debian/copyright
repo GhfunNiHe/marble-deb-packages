@@ -1,0 +1,14 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: firmware-xiaomi-marble
+Source: https://github.com/iLtanaka/firmware-xiaomi-marble
+
+Files: *
+Copyright: Qualcomm Technologies, Inc. and Xiaomi Inc.
+License: proprietary
+ Proprietary signed firmware extracted from the stock firmware of the
+ Xiaomi POCO F5 / Redmi Note 12 Turbo. Redistribution is permitted for use
+ on the device only; no modification, no relicensing, no commercial
+ redistribution as a standalone product.
+ .
+ These blobs cannot be audited or built from source. Debian's
+ non-free-firmware archive is the usual home for files of this kind.

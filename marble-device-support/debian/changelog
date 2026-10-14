@@ -1,0 +1,113 @@
+marble-device-support (1.0.0-8) unstable; urgency=medium
+
+  * Ship a read-only NetworkManager profile for the China Telecom data
+    connection (usr/lib/NetworkManager/system-connections/ct-data.nmconnection,
+    apn ctlte). NM loads /usr/lib profiles since 1.36, so a fresh rootfs has
+    cellular data as a working fallback route with zero manual setup. Ships
+    with autoconnect disabled: enabling it while the modem is still coming up
+    races ModemManager's initialization and trips the
+    mm_iface_modem_count_bearers assertion (SIGABRT, upstream master bug).
+    Bring data up after registration with 'nmcli con up ct-data'.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 07:55:00 +0800
+
+marble-device-support (1.0.0-7) unstable; urgency=medium
+
+  * Power the controller back on after programming the Bluetooth address in
+    marble-mac-restore.sh. The script has to power hci0 down before
+    'btmgmt public-addr' can take, and bluetoothd's AutoEnable only fires
+    when the index is first added - which we already raced past with the
+    power off - so after a clean boot the controller sat at Powered: no even
+    though the address was correct. Explicit 'btmgmt power on' closes that
+    race.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 05:10:00 +0800
+
+marble-device-support (1.0.0-6) unstable; urgency=medium
+
+  * Fix the sensor chain, which never came up: hexagonrpcd_fw_dir pointed at
+    /usr/share/qcom/ while firmware-xiaomi-marble installs the HexagonFS tree
+    one level down, at /usr/share/qcom/hexagonfs/. With the wrong root the
+    virtual FS resolves none of sensors/sns_reg.conf, sensors/registry/ or
+    socinfo/, the SLPI's sensor_process asserts
+    (sns_registry_sensor.c:321:SNS_RC_SUCCESS == rc) and remoteproc reports
+    "crash detected in slpi"; hexagonrpcd then loses the FastRPC channel
+    ("Broken pipe"), exits, and iio-sensor-proxy gives up with "'registry'
+    sensor unavailable". Pointing -R at /usr/share/qcom/hexagonfs/ leaves the
+    SLPI stable and hexagonrpcd running.
+  * Ship 82-libssc-marble-sensors.rules: iio-sensor-proxy's own 80 rule tags
+    the fastrpc nodes "ssc-light ssc-compass" only, so the accelerometer and
+    proximity sensor the SLPI exposes are never claimed even though ssccli
+    reads both. Appending "ssc-accel ssc-proximity" makes D-Bus report
+    HasAccelerometer and HasProximity.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 05:05:00 +0800
+
+marble-device-support (1.0.0-5) unstable; urgency=medium
+
+  * Merge marble-wlan-mac.service and marble-bt-mac.service into one
+    marble-mac-restore.service: both addresses come out of the same persist
+    file (qca6490/wlan_mac.bin), so one unit mounts persist once, parses the
+    MAC once and has a single boot-ordering point. WLAN half keeps loading
+    ath11k_pci (still blacklisted in usr/lib/modprobe.d/marble-wlan.conf);
+    Bluetooth half keeps pushing the derived address (WLAN MAC minus one on
+    the last octet) through btmgmt, and now only warns on failure so a
+    Bluetooth problem cannot fail the unit that Wi-Fi depends on.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 04:40:00 +0800
+
+marble-device-support (1.0.0-4) unstable; urgency=medium
+
+  * Ship the Bluetooth address restore: marble-bt-mac.service derives the
+    Bluetooth address from the factory WLAN MAC in persist (wlan0 minus one on
+    the last octet, the Xiaomi convention seen on boards that also carry
+    persist/wlan_bt/bt.mac) and pushes it through 'btmgmt public-addr'. The
+    stock NV blob qca/wcnhpnv21g.bin has no BD_ADDR, so without this the
+    controller reports 00:00:00:00:00:00, the kernel keeps hci0
+    HCI_UNCONFIGURED and 'bluetoothctl list' is empty even though dmesg shows
+    the QCA firmware download completing. The address is volatile, so this
+    runs on every boot, after bluetooth.service.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 04:35:00 +0800
+
+marble-device-support (1.0.0-3) unstable; urgency=medium
+
+  * Ship the factory WLAN MAC restore: marble-wlan-mac.service mounts the
+    Android persist partition read-only, copies qca6490/wlan_mac.bin into
+    /lib/firmware/ath11k/WCN6855/hw2.1/ and then modprobes ath11k_pci
+    (blacklisted in usr/lib/modprobe.d/marble-wlan.conf so udev cannot load
+    it earlier). Pairs with the ath11k-load-wlan-mac-from-firmware patch in
+    linux-redmi-marble: without it the interface gets a fresh random MAC at
+    every boot and NM's "restore the permanent address" fails EADDRNOTAVAIL
+    ('config-failed' on connection activation).
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 02:55:00 +0800
+
+marble-device-support (1.0.0-2) unstable; urgency=medium
+
+  * Retarget the sensor-registry drop-in at Debian's hexagonrpcd: upstream
+    ships it for hexagonrpcd-sdsp.service (the Alpine/pmOS per-DSP unit that
+    runs /usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -s -R /usr/share/qcom/),
+    which does not exist in Debian. Debian's hexagonrpcd (source package
+    hexagonrpc) has one unit, and /usr/bin/hexagonrpcd is a wrapper script that
+    assembles the same command line from hexagonrpcd_device/_dsp/_fw_dir, so the
+    drop-in now sets those variables under hexagonrpcd.service.d/.
+    As shipped, the drop-in applied to nothing: the daemon would have started on
+    the ADSP looking for a droid-juicer registry, and the iio-sensor-proxy
+    drop-in ordered it against a unit that never existed.
+  * iio-sensor-proxy.service.d/60-marble-sensors.conf now orders against
+    hexagonrpcd.service.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 01:30:00 +0800
+
+marble-device-support (1.0.0-1) unstable; urgency=medium
+
+  * Initial Debian packaging for Xiaomi Poco F5 / Redmi Note 12 Turbo (marble).
+  * Packages the distro-agnostic hardware support layer from
+    github.com/iLtanaka/marble-device-support (UCM2, udev rules, systemd
+    services and drop-ins, sysctl, environment.d).
+  * Fix ExecStart paths in marble-compositor-boost.service and
+    marble-panel-on.service: upstream ships /usr/local/sbin/<name> while
+    the Makefile installs /usr/libexec/<name>.sh (203/EXEC as shipped).
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Mon, 12 Oct 2026 02:59:59 +0800

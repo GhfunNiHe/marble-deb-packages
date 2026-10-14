@@ -1,0 +1,90 @@
+Source: libqmi
+Priority: optional
+Maintainer: DebianOnMobile Maintainers <debian-on-mobile-maintainers@alioth-lists.debian.net>
+Uploaders: Arnaud Ferraris <aferraris@debian.org>,
+           Guido Günther <agx@sigxcpu.org>,
+           Henry-Nicolas Tourneur <debian@nilux.be>,
+           Martin <debacle@debian.org>
+Build-Depends: debhelper-compat (= 13),
+               bash-completion,
+               gir1.2-gio-2.0-dev,
+               gir1.2-gobject-2.0-dev,
+               gobject-introspection (>= 1.80),
+               gi-docgen <!nodoc>,
+               help2man,
+               libglib2.0-dev,
+               libgudev-1.0-dev,
+               libmbim-glib-dev,
+               libqrtr-glib-dev (>= 1.0.0),
+               meson,
+               pkgconf,
+Build-Depends-Indep: libglib2.0-doc <!nodoc>
+Standards-Version: 4.7.2
+Section: libs
+Homepage: https://www.freedesktop.org/wiki/Software/libqmi
+Vcs-Git: https://salsa.debian.org/DebianOnMobile-team/libqmi.git
+Vcs-Browser: https://salsa.debian.org/DebianOnMobile-team/libqmi
+
+Package: libqmi-glib-dev
+Section: libdevel
+Architecture: linux-any
+Multi-Arch: same
+Depends: ${misc:Depends},
+         libmbim-glib-dev,
+         libqmi-glib5 (= ${binary:Version}),
+         libglib2.0-dev,
+         libqrtr-glib-dev,
+         ${gir:Depends},
+Suggests: libqmi-glib-doc,
+Provides: ${gir:Provides}
+Description: Header files for adding QMI support to applications that use glib
+ This package contains the header and pkg-config files for development
+ applications using QMI functionality from applications that use glib.
+
+Package: libqmi-glib-doc
+Section: doc
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends},
+Suggests: devhelp,
+Build-Profiles: <!nodoc>
+Description: API documentation for libqmi-glib
+ This package provides the API documentation for libqmi-glib for adding
+ QMI support to applications that use glib.
+
+Package: libqmi-glib5
+Architecture: linux-any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends},
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Description: Support library to use the Qualcomm MSM Interface (QMI) protocol
+ Libraries for adding QMI support to applications that use glib.
+
+Package: libqmi-utils
+Section: net
+Architecture: linux-any
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Description: Utilities to use the QMI protocol from the command line
+ This package contains the utilities that make it easier to use QMI
+ functionality from the command line.
+
+Package: libqmi-proxy
+Section: net
+Architecture: linux-any
+Multi-Arch: foreign
+Depends: libqmi-glib5 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: Proxy to communicate with QMI ports
+ This package contains the binary qmi-proxy used by libqmi to allow multiple
+ clients to use the same QMI port simultaneously.
+
+Package: gir1.2-qmi-1.0
+Section: introspection
+Architecture: linux-any
+Multi-Arch: same
+Depends: ${gir:Depends}, ${misc:Depends}
+Description: GObject introspection data for libqmi-glib
+ This package contains introspection data for the libqmi-glib library.

@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --buildsystem=meson
+
+# -Dssc-support=enabled is the whole point of this package: it makes meson
+# require libssc and turns on the Qualcomm Sensor Core drivers. Without it the
+# build silently produces an iio-sensor-proxy that can only see plain IIO
+# sensors, which is exactly what the archive package does.
+#
+# udevrulesdir and systemdsystemunitdir are passed explicitly so the configure
+# step needs neither udev.pc nor systemd.pc, and so the rules land where the
+# rest of this repository puts them (marble-device-support installs
+# 81-libssc-xiaomi-marble.rules into /usr/lib/udev/rules.d and its
+# iio-sensor-proxy.service drop-in into /usr/lib/systemd/system).
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-Db_lto=true \
+		-Dssc-support=enabled \
+		-Dsystemdsystemunitdir=/usr/lib/systemd/system \
+		-Dudevrulesdir=/usr/lib/udev/rules.d

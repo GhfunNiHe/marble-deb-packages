@@ -1,0 +1,58 @@
+Description: wait for the SSC service to appear on the QRTR bus
+ The QRTR node lookup for the SSC service is single-shot, but the DSP side
+ only publishes that service a few seconds into the boot. On a no-initramfs
+ direct-boot system iio-sensor-proxy is started before that, fails the lookup
+ and then exits; the sensors stay invisible until something restarts it.
+ .
+ Retry the lookup for a few seconds, and do not delay at all when the service
+ is already there.
+Origin: sheng_fedora_packages/libssc/wait_for_qmi_service.patch
+Forwarded: no
+Author: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+--- a/src/libssc-client.c
++++ b/src/libssc-client.c
+@@ -17,6 +17,7 @@
+  */
+ 
+ #include "libssc-client-private.h"
++#include <unistd.h>
+ 
+ enum {
+ 	SIGNAL_REPORT,
+@@ -361,14 +362,30 @@
+ 		return;
+ 	}
+ 
+-	/* Find QRTR node for SSC service */
+-	for (GList *l = qrtr_bus_peek_nodes (priv->bus); l != NULL; l = l->next) {
+-		node = l->data;
++	/* Find QRTR node for SSC service.
++	 *
++	 * The SSC service appears on the QRTR bus only once the DSP side is up:
++	 * hexagonrpcd publishes it a few seconds into the boot, and on a
++	 * direct-boot (no initramfs) system iio-sensor-proxy can be started before
++	 * that happens. Retry for a few seconds instead of failing on the first
++	 * lookup, so the sensor proxy does not have to be restarted by hand.
++	 * (CI asserts on the message below, so a patch that stops applying is
++	 * caught instead of silently building an unchanged library.) */
++	for (int attempt = 0; attempt < 5; attempt++) {
++		for (GList *l = qrtr_bus_peek_nodes (priv->bus); l != NULL; l = l->next) {
++			node = l->data;
++
++			if (node && qrtr_node_lookup_port (node, QMI_SERVICE_SSC) >= 0) {
++				found = TRUE;
++				break;
++			}
++		}
+ 
+-		if (node && qrtr_node_lookup_port (node, QMI_SERVICE_SSC) >= 0) {
+-			found = TRUE;
++		if (found || attempt == 4)
+ 			break;
+-		}
++
++		g_debug ("SSC service not found yet, retrying (%d/5)", attempt + 1);
++		sleep (1);
+ 	}
+ 
+ 	if (!found) {

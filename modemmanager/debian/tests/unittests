@@ -1,0 +1,23 @@
+#!/bin/bash
+set -e
+
+source debian/tests/launch-mm.sh
+
+# stop ModemManager and make sure it's inactive
+sudo systemctl stop ModemManager.service
+[[ $(systemctl is-active ModemManager.service) == "inactive" ]] || exit 1
+
+# Patch some tests to use the installed ModemManager.service
+patch -p1 < debian/tests/0001-Test-running-service-in-plugin-generic.patch
+meson setup debian/build
+
+# filter tests that do not need sudo powers
+test_list=$(meson test --list -C debian/build) 2> /dev/null
+test_list=${test_list//test-plugin-generic}
+meson test $test_list -C debian/build
+
+# sudo needed for this specific test to dbus-launch the installed ModemManager.service
+sudo meson test test-plugin-generic -C debian/build
+
+# make sure ModemManager got dbus-activated by the unit-tests
+[[ $(systemctl is-active ModemManager.service) == "active" ]] || exit 1

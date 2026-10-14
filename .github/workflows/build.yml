@@ -1,0 +1,376 @@
+name: Build Marble Deb Packages
+
+# Everything in this repo is built here — there is deliberately no build
+# script. Each package directory is self-contained (`<pkg>/debian/` plus its
+# config/auxiliary files) and is overlaid onto a fresh upstream checkout
+# inside the workflow, mirroring sheng_fedora_packages.
+#
+# The kernel is the heavy one (ThinLTO + 1356 modules, 30-90 min even with a
+# warm ccache), so it gets its own manual-only workflow too:
+# build-kernel-deb.yml. Note that /boot ships only what the boot chain reads
+# (vmlinuz + DTB) and no initramfs is generated: this is the original port's
+# verified no-initramfs direct-boot route.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'linux-redmi-marble/**'
+      - 'marble-device-support/**'
+      - 'firmware-redmi-marble/**'
+      - 'libssc/**'
+      - 'libqmi/**'
+      - 'modemmanager/**'
+      - 'iio-sensor-proxy-ssc/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+# Rebuilds supersede each other; never queue them up.
+concurrency:
+  group: build-marble-debs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build DEBs
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    container:
+      image: debian:trixie
+
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential debhelper fakeroot dpkg-dev ccache git ca-certificates wget \
+            bc bison flex libssl-dev libelf-dev dwarves \
+            rsync cpio kmod python3 zstd xz-utils lz4 \
+            clang lld llvm \
+            meson ninja-build pkg-config \
+            libglib2.0-dev libqmi-glib-dev libprotobuf-c-dev \
+            protobuf-compiler protobuf-c-compiler \
+            libgudev-1.0-dev libpolkit-gobject-1-dev \
+            libmbim-glib-dev libqrtr-glib-dev libsystemd-dev libgirepository1.0-dev \
+            gtk-doc-tools gi-docgen help2man valac xsltproc systemd-dev
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup work dirs
+        run: mkdir -p "$RUNNER_TEMP/build" "$GITHUB_WORKSPACE/out"
+
+      # ================================================================
+      # marble-device-support: overlay debian/ onto the upstream checkout
+      # ================================================================
+      - name: "Build: marble-device-support"
+        run: |
+          git clone --depth 1 https://github.com/iLtanaka/marble-device-support.git \
+            "$RUNNER_TEMP/build/marble-device-support"
+          cp -a marble-device-support/debian "$RUNNER_TEMP/build/marble-device-support/debian"
+          cd "$RUNNER_TEMP/build/marble-device-support"
+          dpkg-buildpackage -b -us -uc
+          cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
+
+      # ================================================================
+      # firmware: overlay debian/ onto the upstream *tag* snapshot. The tag
+      # comes from debian/changelog so there is a single version source.
+      # Upstream owns the blobs; debian/rules owns the install layout and
+      # the wcn-prefixed Bluetooth links btqca asks for on WCN6855.
+      # ================================================================
+      - name: "Build: firmware-redmi-marble"
+        run: |
+          FWVER=$(dpkg-parsechangelog -l firmware-redmi-marble/debian/changelog -SVersion | cut -d- -f1)
+          echo "FWVER=$FWVER" >> "$GITHUB_ENV"
+          wget -c -q -O "$RUNNER_TEMP/build/firmware.tar.gz" \
+            "https://github.com/iLtanaka/firmware-xiaomi-marble/archive/refs/tags/v${FWVER}/firmware-xiaomi-marble-${FWVER}.tar.gz"
+          mkdir -p "$RUNNER_TEMP/build/fw"
+          tar -xf "$RUNNER_TEMP/build/firmware.tar.gz" -C "$RUNNER_TEMP/build/fw"
+          SRC=$(find "$RUNNER_TEMP/build/fw" -mindepth 1 -maxdepth 1 -type d | head -1)
+          [ -n "$SRC" ] || { echo "FAIL: firmware tarball has no top-level directory"; exit 1; }
+
+          cp -a firmware-redmi-marble/debian "$SRC/debian"
+          cd "$SRC"
+          dpkg-buildpackage -b -us -uc
+          cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
+
+      # ================================================================
+      # libqmi: git master, pinned. The QMI_LOC engine on this modem is
+      # AFW-gated: GPS only starts when the client identifies itself with
+      # the client-identification TLVs (clientStrId 0x10 / clientType 0x11 /
+      # enablePosRequestNotification 0x12) that went upstream via MR !470
+      # and are absent from the 1.38.0 that Debian trixie ships. ModemManager
+      # (built right after) needs libqmi-glib >= 1.37.95 plus those TLVs.
+      # ================================================================
+      - name: "Build: libqmi"
+        run: |
+          LIBQMI_COMMIT=$(cat libqmi/COMMIT)
+          wget -c -q -O "$RUNNER_TEMP/build/libqmi.tar.gz" \
+            "https://gitlab.freedesktop.org/mobile-broadband/libqmi/-/archive/${LIBQMI_COMMIT}/libqmi-${LIBQMI_COMMIT}.tar.gz"
+          mkdir -p "$RUNNER_TEMP/build/libqmi"
+          tar -xf "$RUNNER_TEMP/build/libqmi.tar.gz" -C "$RUNNER_TEMP/build/libqmi" --strip-components=1
+          cp -a libqmi/debian "$RUNNER_TEMP/build/libqmi/debian"
+          cd "$RUNNER_TEMP/build/libqmi"
+          dpkg-buildpackage -b -us -uc -d
+          dpkg -i "$RUNNER_TEMP/build"/libqmi-glib5_*.deb "$RUNNER_TEMP/build"/libqmi-glib-dev_*.deb \
+                  "$RUNNER_TEMP/build"/gir1.2-qmi-1.0_*.deb
+          cp "$RUNNER_TEMP/build"/libqmi-*.deb "$RUNNER_TEMP/build"/gir1.2-qmi-*.deb "$GITHUB_WORKSPACE/out/" || true
+
+      # ================================================================
+      # modemmanager: git master, pinned to the commit the AFW-unlock and
+      # Position-Report patches were authored against. Stock Debian MM
+      # (1.24.2) fails '--location-enable-gps-nmea' with QMI error 46 on
+      # this modem: the GNSS engine refuses non-framework clients. Tests
+      # are skipped (dev snapshot, one flaky test) via DEB_BUILD_OPTIONS.
+      # ================================================================
+      - name: "Build: modemmanager"
+        run: |
+          MM_COMMIT=$(cat modemmanager/COMMIT)
+          wget -c -q -O "$RUNNER_TEMP/build/mm.tar.gz" \
+            "https://gitlab.freedesktop.org/mobile-broadband/ModemManager/-/archive/${MM_COMMIT}/ModemManager-${MM_COMMIT}.tar.gz"
+          mkdir -p "$RUNNER_TEMP/build/mm"
+          tar -xf "$RUNNER_TEMP/build/mm.tar.gz" -C "$RUNNER_TEMP/build/mm" --strip-components=1
+          cd "$RUNNER_TEMP/build/mm"
+          patch -p1 < "$GITHUB_WORKSPACE/modemmanager/0002-shared-qmi-unlock-AFW-gated-GNSS-engines-at-LOC-start.patch"
+          patch -p1 < "$GITHUB_WORKSPACE/modemmanager/0003-shared-qmi-derive-location-from-Position-Report-indi.patch"
+          cp -a "$GITHUB_WORKSPACE/modemmanager/debian" debian
+          DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -us -uc -d
+          cp "$RUNNER_TEMP/build"/modemmanager_*.deb "$RUNNER_TEMP/build"/libmm-glib0_*.deb \
+             "$RUNNER_TEMP/build"/libmm-glib-dev_*.deb "$RUNNER_TEMP/build"/gir1.2-modemmanager-*.deb \
+             "$GITHUB_WORKSPACE/out/"
+
+      # ================================================================
+      # libssc: overlay debian/ onto the upstream codeberg *tag* snapshot. The
+      # tag comes from debian/changelog so there is a single version source.
+      # Debian and Ubuntu do not package libssc, which is the only reason
+      # their iio-sensor-proxy cannot have Qualcomm SSC support.
+      # ================================================================
+      - name: "Build: libssc"
+        run: |
+          LSVER=$(dpkg-parsechangelog -l libssc/debian/changelog -SVersion | cut -d- -f1)
+          echo "LSVER=$LSVER" >> "$GITHUB_ENV"
+          wget -c -q -O "$RUNNER_TEMP/build/libssc.tar.gz" \
+            "https://codeberg.org/DylanVanAssche/libssc/archive/v${LSVER}.tar.gz"
+          mkdir -p "$RUNNER_TEMP/build/libssc"
+          tar -xf "$RUNNER_TEMP/build/libssc.tar.gz" -C "$RUNNER_TEMP/build/libssc" --strip-components=1
+
+          cp -a libssc/debian "$RUNNER_TEMP/build/libssc/debian"
+          cd "$RUNNER_TEMP/build/libssc"
+          dpkg-buildpackage -b -us -uc
+          cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
+
+      # iio-sensor-proxy needs libssc's headers and pkg-config file, so the
+      # package that was just built is installed into the container before
+      # this step (this is also what satisfies its Build-Depends).
+      - name: "Install libssc (build dependency of iio-sensor-proxy-ssc)"
+        run: |
+          apt-get install -y "$GITHUB_WORKSPACE"/out/libssc_*.deb
+          pkg-config --modversion libssc
+
+      # ================================================================
+      # iio-sensor-proxy-ssc: stock upstream 3.9, built with SSC support on.
+      # Named -ssc and declared as a replacement for iio-sensor-proxy, because
+      # the archive build has no libssc to link against.
+      # ================================================================
+      - name: "Build: iio-sensor-proxy-ssc"
+        run: |
+          IIOVER=$(dpkg-parsechangelog -l iio-sensor-proxy-ssc/debian/changelog -SVersion | cut -d- -f1)
+          echo "IIOVER=$IIOVER" >> "$GITHUB_ENV"
+          wget -c -q -O "$RUNNER_TEMP/build/iio.tar.gz" \
+            "https://gitlab.freedesktop.org/hadess/iio-sensor-proxy/-/archive/${IIOVER}/iio-sensor-proxy-${IIOVER}.tar.gz"
+          mkdir -p "$RUNNER_TEMP/build/iio"
+          tar -xf "$RUNNER_TEMP/build/iio.tar.gz" -C "$RUNNER_TEMP/build/iio" --strip-components=1
+
+          cp -a iio-sensor-proxy-ssc/debian "$RUNNER_TEMP/build/iio/debian"
+          cd "$RUNNER_TEMP/build/iio"
+          dpkg-buildpackage -b -us -uc
+          cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
+
+      # ================================================================
+      # Kernel: overlay debian/ + configs onto the upstream main snapshot
+      # ================================================================
+      - name: Restore ccache
+        uses: actions/cache@v6
+        with:
+          path: ~/.ccache
+          key: ccache-linux-redmi-marble-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('linux-redmi-marble/debian/rules', 'linux-redmi-marble/config-xiaomi-marble.aarch64') }}
+          restore-keys: |
+            ccache-linux-redmi-marble-${{ runner.os }}-${{ runner.arch }}-
+            ccache-linux-redmi-marble-
+
+      - name: "Build: linux-redmi-marble"
+        run: |
+          mkdir -p ~/.ccache
+          wget -c -q -O "$RUNNER_TEMP/build/linux-marble.tar.gz" \
+            "https://github.com/iLtanaka/linux-marble/archive/refs/heads/main/linux-marble.tar.gz"
+          tar -xf "$RUNNER_TEMP/build/linux-marble.tar.gz" -C "$RUNNER_TEMP/build"
+          SRC="$RUNNER_TEMP/build/linux-marble-main"
+          cp -a linux-redmi-marble/debian "$SRC/debian"
+          cp linux-redmi-marble/config-xiaomi-marble.aarch64 "$SRC/"
+
+          cd "$SRC"
+          dpkg-buildpackage -b -us -uc
+          echo "=== ccache stats ==="
+          ccache --show-stats
+
+          KREL=$(cat include/config/kernel.release)
+          echo "KREL=$KREL" >> "$GITHUB_ENV"
+          cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
+          {
+            echo "### Kernel build result"
+            echo ""
+            echo "- kernel release: \`${KREL}\`"
+            echo "- modules: $(find "$GITHUB_WORKSPACE/out" -name '*.deb' -exec dpkg-deb -c {} \; | grep -c 'ko\.zst')"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ================================================================
+      # Verify the DEB rather than trusting "the build succeeded"
+      # ================================================================
+      # /boot must contain exactly the two files the boot chain reads, and
+      # vmlinuz must be the uncompressed arm64 Image (U-Boot booti cannot
+      # load a gzip/zstd image). Catches regressions in debian/rules.
+      - name: Verify kernel DEB
+        run: |
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/linux-redmi-marble_*.deb | head -1)
+          [ -n "$DEB" ] || { echo "FAIL: no kernel deb built"; exit 1; }
+          dpkg-deb -f "$DEB" Package Version Architecture Depends
+
+          BOOT=$(dpkg-deb -c "$DEB" | awk '{print $6}' | grep '^\./boot/[^/]*$' | sort)
+          EXPECT=$(printf './boot/sm8475-xiaomi-marble-%s.dtb\n./boot/vmlinuz-%s\n' "$KREL" "$KREL")
+          if [ "$BOOT" != "$EXPECT" ]; then
+            echo "FAIL: /boot contents are not vmlinuz + DTB only"
+            diff <(echo "$BOOT") <(echo "$EXPECT") || true
+            exit 1
+          fi
+
+          dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify"
+          if ! file "$RUNNER_TEMP/verify/boot/vmlinuz-$KREL" | grep -q 'ARM64 boot executable Image'; then
+            echo "FAIL: vmlinuz is not an uncompressed arm64 Image"; exit 1
+          fi
+          echo "kernel deb verified: $DEB"
+
+      # Same reasoning as the kernel: assert on the deliverable. The
+      # Bluetooth link is the one that has already shipped wrong once
+      # (qca/wcnbtfw21.tlv, with the "hp" stripped), which makes btqca fail
+      # with -ENOENT on WCN6855 while the blobs look present on disk.
+      - name: Verify firmware DEB
+        run: |
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/firmware-redmi-marble_*.deb | head -1)
+          [ -n "$DEB" ] || { echo "FAIL: no firmware deb built"; exit 1; }
+          dpkg-deb -f "$DEB" Package Version Architecture Recommends
+
+          LIST=$(dpkg-deb -c "$DEB")
+          for f in \
+            ./usr/lib/firmware/qcom/sm8475/xiaomi/marble/a730_zap.mbn \
+            ./usr/lib/firmware/qcom/sm8475/xiaomi/marble/adsp2.b00 \
+            ./usr/lib/firmware/qcom/sm8475/xiaomi/marble/modem.mdt \
+            ./usr/lib/firmware/qcom/sm8475/xiaomi/marble/slpi2.b00 \
+            ./usr/lib/firmware/qcom/a730_sqe.fw \
+            ./usr/lib/firmware/qcom/gmu_gen70000.bin \
+            ./usr/lib/firmware/qcom/sm8450/SM8475-Xiaomi-Marble-tplg.bin \
+            ./usr/lib/firmware/qca/hpbtfw21.tlv \
+            ./usr/lib/firmware/ath11k/WCN6855/hw2.0/board.bin \
+            ./usr/share/qcom/hexagonfs/sns_reg_version ; do
+            echo "$LIST" | grep -q " $f\$" || { echo "FAIL: firmware deb is missing $f"; exit 1; }
+          done
+
+          echo "$LIST" | grep -qE 'qca/wcnhpbtfw21\.tlv -> hpbtfw21\.tlv$' \
+            || { echo "FAIL: qca/wcnhpbtfw21.tlv link missing or points at the wrong name"; exit 1; }
+          echo "$LIST" | grep -qE 'qca/wcnhpnv21\.301 -> hpnv21\.301$' \
+            || { echo "FAIL: qca/wcnhpnv21.301 link missing or points at the wrong name"; exit 1; }
+
+          echo "wcn-prefixed links: $(echo "$LIST" | grep -c 'wcnh')"
+          echo "firmware deb verified: $DEB"
+
+      # libssc is a build dependency of iio-sensor-proxy-ssc, so its contents
+      # matter as much as its runtime behaviour: the headers and the pkg-config
+      # file are the interface the other package compiles against.
+      - name: Verify libssc DEB
+        run: |
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/libssc_*.deb | head -1)
+          [ -n "$DEB" ] || { echo "FAIL: no libssc deb built"; exit 1; }
+          dpkg-deb -f "$DEB" Package Version Architecture Depends
+
+          LIST=$(dpkg-deb -c "$DEB")
+          for pat in 'libssc\.so\.2' '/ssccli$' 'pkgconfig/libssc\.pc$' 'include/libssc/libssc-sensor\.h$'; do
+            echo "$LIST" | grep -qE "$pat" || { echo "FAIL: libssc deb is missing $pat"; exit 1; }
+          done
+
+          rm -rf "$RUNNER_TEMP/verify-libssc"
+          dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify-libssc"
+          SO=$(find "$RUNNER_TEMP/verify-libssc" -name 'libssc.so.2*' -type f | head -1)
+          [ -n "$SO" ] || { echo "FAIL: no libssc.so.2 in the package"; exit 1; }
+          echo "shared library: $SO"
+          # A quilt patch that stops applying does not fail the build, it just
+          # quietly ships the unpatched library. Assert on the string the patch
+          # adds instead of trusting "the build succeeded".
+          strings "$SO" | grep -q 'not found yet, retrying' \
+            || { echo "FAIL: wait-for-qmi-service.patch is not in the built library"; exit 1; }
+          echo "libssc deb verified: $DEB"
+
+      # The one assertion that distinguishes this package from Debian's own
+      # iio-sensor-proxy: if -Dssc-support ever falls back to disabled, the
+      # binary no longer links libssc and dpkg-shlibdeps drops it from Depends.
+      - name: Verify iio-sensor-proxy-ssc DEB
+        run: |
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/iio-sensor-proxy-ssc_*.deb | head -1)
+          [ -n "$DEB" ] || { echo "FAIL: no iio-sensor-proxy-ssc deb built"; exit 1; }
+          dpkg-deb -f "$DEB" Package Version Architecture Depends Provides Conflicts Replaces
+
+          dpkg-deb -f "$DEB" Depends | grep -q 'libssc' \
+            || { echo "FAIL: no Depends on libssc -> SSC support is off"; exit 1; }
+          dpkg-deb -f "$DEB" Provides | grep -q 'iio-sensor-proxy' \
+            || { echo "FAIL: missing Provides: iio-sensor-proxy"; exit 1; }
+
+          LIST=$(dpkg-deb -c "$DEB")
+          # Path prefixes are matched loosely: dh may answer with /usr/lib or
+          # /lib depending on the merge state of the container. What must not
+          # change is the file names, because marble-device-support drops in on
+          # iio-sensor-proxy.service and the rootfs enables that exact unit.
+          for pat in '/usr/libexec/iio-sensor-proxy$' '/monitor-sensor$' \
+                     '/systemd/system/iio-sensor-proxy\.service$' \
+                     '/udev/rules\.d/80-iio-sensor-proxy\.rules$' \
+                     '/dbus-1/system\.d/net\.hadess\.SensorProxy\.conf$' \
+                     '/polkit-1/actions/net\.hadess\.SensorProxy\.policy$'; do
+            echo "$LIST" | grep -qE "$pat" || { echo "FAIL: missing $pat"; exit 1; }
+          done
+          echo "iio-sensor-proxy-ssc deb verified: $DEB"
+
+      - name: Upload DEBs
+        uses: actions/upload-artifact@v7
+        with:
+          name: marble-debs
+          path: out/**/*.deb
+          retention-days: 14
+          if-no-files-found: error
+
+  # ==================================================================
+  # GitHub Release
+  # ==================================================================
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Get short commit SHA
+        run: echo "SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
+
+      - name: Download DEBs
+        uses: actions/download-artifact@v8
+        with:
+          name: marble-debs
+          path: debs
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: marble-deb-${{ env.SHORT_SHA }}
+          name: Marble Deb Packages (${{ env.SHORT_SHA }})
+          files: debs/**/*.deb
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

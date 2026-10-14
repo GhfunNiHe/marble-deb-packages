@@ -1,0 +1,74 @@
+#!/bin/sh
+# postinst for linux-redmi-marble (no-initramfs direct-boot route, same as
+# the original project's verified path: alt.conf has no initrd line):
+#   1. depmod for the new kernel (modules live in /usr/lib/modules/<ver>,
+#      loaded by udev/systemd after the rootfs mounts)
+#   2. ESP sync: uncompressed Image -> /marble/vmlinuz, DTB -> /marble/..., and a
+#      rewritten /extlinux/extlinux.conf pointing at PARTLABEL=linux.
+#   Skipped gracefully when /boot/efi is not mounted (chroot build envs).
+set -e
+
+# Kernel release: authoritative source is the installed marker file,
+# falling back to the newest modules directory.
+KREL=$(cat /usr/share/linux-redmi-marble/kernel.release 2>/dev/null || true)
+if [ -z "$KREL" ]; then
+	KREL=$(ls -dt /usr/lib/modules/*/ 2>/dev/null | head -1 | sed 's#/$##; s#.*/##')
+fi
+
+case "$1" in
+	configure)
+		if [ -z "$KREL" ]; then
+			echo "linux-redmi-marble: no kernel modules found, skipping" >&2
+			exit 0
+		fi
+
+		# 1. module dependency database (ext4/UFS are built-in, so the
+		#    kernel mounts root directly; extra drivers load from rootfs)
+		depmod -a "$KREL"
+
+		# 2. ESP sync
+		if mountpoint -q /boot/efi; then
+			mkdir -p /boot/efi/marble /boot/efi/extlinux
+			# /boot/vmlinuz-<ver> IS the uncompressed arm64 Image (U-Boot
+			# booti requirement), just renamed on the ESP like the original
+			# project's manual step.
+			cp /boot/vmlinuz-"$KREL" /boot/efi/marble/vmlinuz
+			cp /boot/sm8475-xiaomi-marble-"$KREL".dtb /boot/efi/marble/sm8475-xiaomi-marble.dtb
+
+			# root= is NOT hardcoded. The source of truth is the "/" entry of
+			# /etc/fstab, which is where the rootfs build (and the user) decides
+			# which partition to boot from; PARTLABEL=/UUID=/LABEL=/dev/... are
+			# all valid kernel root= values, so the fstab source field is passed
+			# through verbatim. Falls back to whatever the ESP already carries,
+			# then to the established default. This keeps extlinux.conf in sync
+			# with fstab instead of hardcoding one partition name in two repos.
+			ROOT_SPEC=$(awk '!/^#/ && $2 == "/" { print $1; exit }' /etc/fstab 2>/dev/null || true)
+			if [ -z "$ROOT_SPEC" ] && [ -f /boot/efi/extlinux/extlinux.conf ]; then
+				ROOT_SPEC=$(sed -n 's/.*[[:space:]]root=\([^ ]*\).*/\1/p' \
+					/boot/efi/extlinux/extlinux.conf | head -1)
+			fi
+			if [ -z "$ROOT_SPEC" ]; then
+				ROOT_SPEC="PARTLABEL=linux"
+				echo "linux-redmi-marble: no root entry in /etc/fstab, falling back to root=$ROOT_SPEC" >&2
+			fi
+
+			# extlinux.conf: cmdline is version-independent; U-Boot's default
+			# bootcmd reads /extlinux/extlinux.conf.
+			cat > /boot/efi/extlinux/extlinux.conf <<EOF
+timeout 3
+default marble
+
+label marble
+	menu label Debian (marble)
+	kernel /marble/vmlinuz
+	fdt /marble/sm8475-xiaomi-marble.dtb
+	append root=$ROOT_SPEC rootwait rw console=tty0 loglevel=4 printk.devkmsg=on pstore.compress=none log_buf_len=2M msm_geni_serial.con_enabled=0 clk_ignore_unused pd_ignore_unused regulator_ignore_unused fw_devlink=permissive pcie_aspm=off
+EOF
+			echo "linux-redmi-marble: ESP synced (vmlinuz + dtb + extlinux.conf) for $KREL, root=$ROOT_SPEC"
+		else
+			echo "linux-redmi-marble: /boot/efi not mounted; mount ESP and reinstall to sync" >&2
+		fi
+		;;
+esac
+
+exit 0

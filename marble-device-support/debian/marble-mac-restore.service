@@ -1,0 +1,25 @@
+[Unit]
+Description=marble: restore the factory WLAN and Bluetooth MACs from persist
+# Both addresses come from the same file on the Android persist partition,
+# /persist/qca6490/wlan_mac.bin, so one unit handles both radios.
+#
+# WLAN half: the kernel (linux-redmi-marble, ath11k-load-wlan-mac-from-firmware
+# .patch) reads wlan_mac.bin from the firmware directory when the driver
+# registers, so the file must be in place before ath11k_pci loads - hence the
+# modprobe blacklist in usr/lib/modprobe.d/marble-wlan.conf and the explicit
+# load here instead of by udev coldplug.
+#
+# Bluetooth half: the stock NV blob has no BD_ADDR, so the controller boots with
+# 00:00:00:00:00:00 and the kernel keeps it out of the management index list
+# until userspace pushes a public address. That has to happen after
+# bluetoothd, which is what powers the controller up (and back down) first.
+After=local-fs.target bluetooth.service
+Before=network.target NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/marble-mac-restore.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

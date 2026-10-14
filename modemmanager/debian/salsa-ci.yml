@@ -1,0 +1,16 @@
+---
+include:
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/salsa-ci.yml
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/pipeline-jobs.yml
+
+workflow:
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "debian/experimental"
+      variables:
+        SALSA_CI_DISABLE_PIUPARTS: 1
+        SALSA_CI_DISABLE_AUTOPKGTEST: 1
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "debian/experimental"
+      variables:
+        SALSA_CI_DISABLE_PIUPARTS: 1
+        SALSA_CI_DISABLE_AUTOPKGTEST: 1
+    - when: always

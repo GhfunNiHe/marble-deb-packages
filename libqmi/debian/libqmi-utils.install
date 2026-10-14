@@ -1,0 +1,5 @@
+usr/bin
+usr/share/bash-completion/completions/qmicli
+usr/share/man/man1/qmi-firmware-update.1
+usr/share/man/man1/qmi-network.1
+usr/share/man/man1/qmicli.1

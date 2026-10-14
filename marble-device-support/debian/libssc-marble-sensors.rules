@@ -1,0 +1,10 @@
+# marble: accelerometer and proximity through the SLPI.
+#
+# iio-sensor-proxy's own 80-iio-sensor-proxy.rules only tags the fastrpc nodes
+# with "ssc-light ssc-compass", so the accelerometer and the proximity sensor
+# that the SLPI exposes are never claimed and D-Bus reports
+# HasAccelerometer=false / HasProximity=false - even though ssccli
+# --sensor=accelerometer / --sensor=proximity read both just fine.
+#
+# Numbered 82 so it runs after 80 and can append to the tag with +=.
+SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-accel ssc-proximity"

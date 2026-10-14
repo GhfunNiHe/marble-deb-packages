@@ -1,0 +1,45 @@
+Source: iio-sensor-proxy-ssc
+Section: misc
+Priority: optional
+Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ meson,
+ ninja-build,
+ pkg-config,
+ libglib2.0-dev (>= 2.76),
+ libgudev-1.0-dev,
+ libpolkit-gobject-1-dev,
+ libssc,
+Standards-Version: 4.6.2
+Homepage: https://gitlab.freedesktop.org/hadess/iio-sensor-proxy
+Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
+Vcs-Browser: https://github.com/GhfunNiHe/marble-deb-package
+Rules-Requires-Root: no
+
+Package: iio-sensor-proxy-ssc
+Architecture: arm64
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Provides: iio-sensor-proxy
+Conflicts: iio-sensor-proxy
+Replaces: iio-sensor-proxy
+Description: IIO sensors to D-Bus proxy (Qualcomm SSC support)
+ iio-sensor-proxy 3.9 built with -Dssc-support=enabled, which adds the sensors
+ that Qualcomm's Sensor Core serves over QRTR/QMI through libssc to the usual
+ IIO ones, and exports all of them on D-Bus as net.hadess.SensorProxy.
+ .
+ The archive build of iio-sensor-proxy cannot enable SSC support because libssc
+ is not packaged in Debian or Ubuntu, so this is the SSC-capable variant. It
+ declares that it provides, replaces and conflicts with iio-sensor-proxy, and
+ the two must not be installed at the same time (they ship the same files).
+ .
+ Everything else is stock upstream 3.9: same D-Bus name, same unit name
+ (iio-sensor-proxy.service, which marble-device-support drops in on) and the
+ same file layout, so it is a drop-in replacement for the archive package.
+ .
+ Build-Depends on libssc is satisfied by this repository's own libssc package,
+ which the build workflow installs before building this one; there is no libssc
+ in the Debian archive, so a plain Debian build host needs libssc installed
+ (or `dpkg-buildpackage -d`).

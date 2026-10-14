@@ -1,0 +1,44 @@
+Source: marble-device-support
+Section: admin
+Priority: optional
+Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ gcc,
+ make,
+Standards-Version: 4.6.2
+Homepage: https://github.com/iLtanaka/marble-device-support
+Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
+Rules-Requires-Root: no
+
+Package: marble-device-support
+Architecture: arm64
+# No ${shlibs:Depends}: dpkg-shlibdeps cannot run on the Fedora build host
+# (no dpkg library metadata). marble-touchboost needs at most GLIBC_2.34
+# (verified with objdump -T), so libc6 (>= 2.34) covers Debian bookworm/trixie.
+Depends: ${misc:Depends},
+ alsa-ucm-conf,
+ bluez,
+ util-linux (>= 2.34),
+ libc6 (>= 2.34),
+Description: Hardware support layer for Xiaomi Poco F5 (marble)
+ Distribution-agnostic hardware support layer for the Xiaomi Poco F5 /
+ Redmi Note 12 Turbo (marble, Qualcomm Snapdragon 7+ Gen 2 / SM7475):
+ .
+  * ALSA UCM2 audio profiles (AW88263S speakers, WCD9385 microphones)
+  * udev rules (UFS scheduler, GPU devfreq floor, SSC sensor tagging)
+  * systemd services: marble-touchboost, marble-compositor-boost,
+    marble-hardware-tuning, marble-panel-on, marble-mac-restore (restores the
+    factory WLAN MAC from the persist partition before ath11k loads, and
+    programs the factory-derived Bluetooth address, without which the WCN6855
+    stays unconfigured and invisible to bluetoothd)
+  * modprobe blacklist for ath11k_pci, which marble-mac-restore.service loads
+    after the MAC file is in place
+  * systemd drop-ins for hexagonrpcd and iio-sensor-proxy, retargeted from the
+   Alpine/pmOS hexagonrpcd-sdsp.service to Debian's hexagonrpcd.service
+  * sysctl (zram dirty-page tuning) and environment.d (GTK4/Wayland)
+ .
+ This package targets mainline Linux on marble (postmarketOS-style
+ U-Boot + extlinux boot), not Android.
+ .
+ Upstream source: https://github.com/iLtanaka/marble-device-support

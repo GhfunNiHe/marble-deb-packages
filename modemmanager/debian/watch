@@ -1,0 +1,4 @@
+version=4
+opts="mode=git,pgpmode=gittag,uversionmangle=s/-(alpha|beta|rc)/~$1/;s/-dev//" \
+  https://gitlab.freedesktop.org/mobile-broadband/@PACKAGE@.git \
+  refs/tags/(\d+\.\d?[0-9][\.\-].*)

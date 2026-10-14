@@ -1,0 +1,27 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: linux-marble
+Upstream-Contact: Tatsuki Tanaka <tatsuki@tanakatatsuki.dev>
+Source: https://github.com/iLtanaka/linux-marble
+
+Files: *
+Copyright: 2005-2026 The Linux kernel developers
+           2026 Tatsuki Tanaka <tatsuki@tanakatatsuki.dev> (marble enablement)
+License: GPL-2.0-only
+ This package is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License version 2 as
+ published by the Free Software Foundation.
+ .
+ This package is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <https://www.gnu.org/licenses/>.
+ .
+ On Debian systems, the complete text of the GNU General
+ Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".
+
+Files: debian/*
+Copyright: 2026 GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+License: GPL-2.0-only

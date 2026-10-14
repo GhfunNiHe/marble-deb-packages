@@ -1,0 +1,40 @@
+Source: linux-redmi-marble
+Section: kernel
+Priority: optional
+Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ clang,
+ lld,
+ llvm,
+ bc,
+ bison,
+ flex,
+ libssl-dev,
+ libelf-dev,
+ rsync,
+ cpio,
+ kmod,
+ python3,
+ ccache,
+ git,
+Standards-Version: 4.6.2
+Homepage: https://github.com/iLtanaka/linux-marble
+Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
+
+Package: linux-redmi-marble
+Architecture: arm64
+Depends: ${misc:Depends}, kmod, linux-base
+Recommends: firmware-redmi-marble
+Description: Linux kernel for Xiaomi Redmi Note 12 Turbo (marble)
+ Mainline Linux 7.2.8 kernel with the marble (Poco F5 / Redmi Note 12 Turbo,
+ SM7475) device enablement patches from the iLtanaka linux-marble tree.
+ .
+ Built with LLVM/ThinLTO and ccache. Ships the uncompressed kernel Image
+ (as vmlinuz-<ver>), the device tree, and the out-of-tree modules. No
+ initramfs is generated (no-initramfs direct boot, the path verified by the
+ original port); the postinst syncs vmlinuz + DTB to the ESP and rewrites
+ /extlinux/extlinux.conf when /boot/efi is mounted.
+ .
+ Local deviations from the author's reference config: CONFIG_LTO_CLANG_THIN=y
+ and CONFIG_NTSYNC=m.

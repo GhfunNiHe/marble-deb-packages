@@ -1,0 +1,646 @@
+libqmi (1.39.1-1+gps1) unstable; urgency=medium
+
+  * Upload to unstable
+  * New upstream stable release
+  * Link docs to devhelp.
+  * Update symbols
+
+ -- Guido Günther <agx@sigxcpu.org>  Thu, 08 Jan 2026 19:23:18 +0100
+
+libqmi (1.37.95-1) experimental; urgency=medium
+
+  * New upstream release
+  * Update upstream signing from
+    https://lists.freedesktop.org/archives/networkmanager/2024-December/000366.html
+  * Update symbols
+
+ -- Guido Günther <agx@sigxcpu.org>  Wed, 26 Nov 2025 10:13:58 +0100
+
+libqmi (1.37.1-1) experimental; urgency=medium
+
+  * New upstream development snapshot
+  * Upload to experimental
+  * signing-key: Add key used for dev snapshots
+  * d/watch: Allow for development snapshots
+  * d/gbp.conf: Switch to debian/experimental
+  * Use gi-docgen. Upstream switched away from gtk-doc
+  * Add new symbols
+
+ -- Guido Günther <agx@sigxcpu.org>  Tue, 03 Jun 2025 20:37:05 +0200
+
+libqmi (1.36.0-2) unstable; urgency=medium
+
+  [ Guido Günther ]
+  * d/gbp.conf: Switch to debian/latest.
+
+  [ Arnaud Ferraris ]
+  * d/watch: convert to version 5.
+    Use the new Gitlab template for easier management, but override the
+    matching pattern so we only get stable (pre)releases, which have an even
+    minor version number.
+  * d/control: drop libgirepository1.0-dev build dependency.
+    This one shouldn't be used anymore as it isn't multiarch-friendly.
+    Instead, use a recent `gobject-introspection` and explicitly (build)
+    depend on the needed `gir1.2-*-dev` packages.
+    While at it, drop the now-obsolete `Rules-Requires-Root` and bump
+    `Standards-Version` as no other change is needed. (Closes: #1118881)
+  * d/copyright: drop reference to old FSF address.
+    Replace it with the usual link to http://www.gnu.org/licenses/.
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Tue, 28 Oct 2025 13:03:13 +0100
+
+libqmi (1.36.0-1) unstable; urgency=medium
+
+  * New upstream release
+  * Update symbols
+
+ -- Guido Günther <agx@sigxcpu.org>  Wed, 09 Apr 2025 10:04:46 +0200
+
+libqmi (1.35.95-2) unstable; urgency=medium
+
+  * Upload to unstable
+  * d/control: libgmi-glib-dev needs libmbim-glib-dev
+  * Add superficial autopkgtest
+
+ -- Guido Günther <agx@sigxcpu.org>  Tue, 11 Mar 2025 09:47:33 +0100
+
+libqmi (1.35.95-1) experimental; urgency=medium
+
+  * New upstream version 1.35.95
+  * Update symbols
+  * Use pkgconf rather than pkg-config
+  * Bump standards version
+
+ -- Guido Günther <agx@sigxcpu.org>  Sun, 09 Mar 2025 22:17:42 +0100
+
+libqmi (1.35.6-1) experimental; urgency=medium
+
+  * New upstream version 1.35.6
+  * Update symbols
+  * Drop patch, applied upstream
+
+ -- Guido Günther <agx@sigxcpu.org>  Thu, 12 Sep 2024 12:14:10 +0200
+
+libqmi (1.34.0-2) unstable; urgency=medium
+
+  * d/patches: fix build on big endian architectures
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Sat, 21 Oct 2023 11:55:32 +0200
+
+libqmi (1.34.0-1) unstable; urgency=medium
+
+  * New upstream version 1.34.0
+  * d/clean: clean up python compiled bytecode files (Closes: #1047700)
+  * libqmi-glib5: update symbols file for new upstream release
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Fri, 20 Oct 2023 12:53:59 +0200
+
+libqmi (1.32.4-2) unstable; urgency=medium
+
+  * Release to unstable
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Tue, 13 Jun 2023 16:37:04 +0200
+
+libqmi (1.32.4-1) experimental; urgency=medium
+
+  * New upstream version 1.32.4
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Sun, 23 Apr 2023 15:46:07 +0200
+
+libqmi (1.32.2-1) unstable; urgency=medium
+
+  * d/watch: only watch for stable releases
+    `libqmi` has a x.y.z version numbering scheme where y is even for
+    stable releases and odd for development ones. Stable release candidates
+    have x.y-rcz version numbers with y being an even number. This change
+    ensures we only watch for stable releases, including RCs.
+  * New upstream version 1.32.2
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Mon, 19 Dec 2022 11:51:57 +0100
+
+libqmi (1.32.0-1) unstable; urgency=medium
+
+  * New upstream version 1.32.0
+  * d/watch: look for git tags instead of source tarballs.
+    Upstream stopped publishing source tarballs and now requests that we
+    use (signed) git tags for new versions. Take this opportunity to update
+    the upstream signing key.
+  * d/patches: drop obsolete patches.
+    The corresponding issue have been fixed upstream.
+  * d/control: update build dependencies
+    `meson` is now the only build system supported for this package, which
+    now also depends on `bash-completion` at build time.
+  * d/rules: adapt to upstream build system change.
+    Upstream switched from `autotools` to `meson`. As a consequence,
+    configure options are handled differently, so let's adapt to those
+    changes.
+  * libqmi-glib5: remove README from installed docs.
+    This file has been removed in the latest version.
+  * libqmi-glib5: update symbols file for new upstream release
+  * d/source: remove obsolete lintian overrides.
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Fri, 28 Oct 2022 15:46:11 +0200
+
+libqmi (1.30.8-1) unstable; urgency=medium
+
+  * New upstream version 1.30.8
+  * d/control: update my email address.
+    Also bump Standards-Version, no change required.
+  * debian: update lintian-overrides.
+    Due to recent lintian updates, the overrides for `libqmi-glib-doc` are
+    no longer needed, while the source package need new overrides: HTML
+    files are their own sources, so the `source-is-missing` lintian error is
+    not relevant here.
+    Moreover, the tag format of the `libqmi-glib5` overrides needs to be
+    updated so it can be useful again.
+  * d/libqmi-glib5: update symbols file with new entries
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Mon, 11 Jul 2022 14:31:52 +0200
+
+libqmi (1.30.6-1) unstable; urgency=medium
+
+  * d/control: make -dev package depend on libqrtr-glib
+    `libqmi` is now compiled with QRTR support by linking against
+    `libqrtr-glib`. However, `libqmi-glib-dev` doesn't depend on
+    `libqrtr-glib-dev`, meaning users need to manually add the latter to
+    their build dependencies. Avoid this by adding `libqrtr-glib-dev` as a
+    dependency to `libqmi-glib-dev`.
+  * debian: lintian-driven fixes and small improvements.
+    This commit includes minor changes spotted by `lintian-brush`:
+    - `d/upstream/metadata`: append `.git` to repo URL
+    - `d/rules`: drop symbols migration (1.14 is long gone)
+  * New upstream version 1.30.6
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Thu, 19 May 2022 19:42:31 +0200
+
+libqmi (1.30.4-2) unstable; urgency=medium
+
+  * d/control: build-depend on libqrtr-glib.
+    This enables support of QMI over QRTR, required to support Qualcomm SoCs
+    in ModemManager.
+  * d/libqmi-glib5: update symbols file with new entries.
+    Building libqmi with QRTR support adds a few new symbols to the library,
+    make sure those are present in the symbols file.
+  * d/libqmi-glib-doc: add lintian override.
+    Documentation generated by gtk-doc is installed to `/usr/share/gtk-doc`
+    as expected. Add a corresponding lintian override, otherwise it will
+    complain about docs installed outside `/usr/share/doc`.
+  * d/copyright: use secure URL for copyright format.
+    Also update copyright information for the `debian/` folder.
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Tue, 22 Feb 2022 10:26:19 +0100
+
+libqmi (1.30.4-1) unstable; urgency=medium
+
+  * New upstream version 1.30.4
+  * d/rules: error out if symbols aren't up-to-date.
+    We want to ship shared libs with up-to-date symbols file, so having the
+    build error out if that's not the case is a good way to ensure we update
+    those before releasing the package.
+  * d/control: sort build dependencies.
+  * lintian-overrides: update to new format for libqmi-glib5.
+    The format for the `symbols-declares-dependency-on-other-package`
+    lintian override has changed to include the corresponding library name.
+    Update the override so it matches the current format and makes lintian
+    happy.
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Wed, 16 Feb 2022 15:20:43 +0100
+
+libqmi (1.30.2-1) unstable; urgency=medium
+
+  * New upstream version 1.30.2
+  * d/control: change maintainer to DebianOnMobile team.
+  * d/control: bump debhelper-compat version and Standards-Version.
+  * d/copyright: add Upstream-Contact field
+  * debian: add salsa CI pipeline
+  * d/source: add upstream metadata
+  * d/watch: bump watch file version, no change required
+  * d/control: update build dependencies.
+  * d/rules: add hardening build options
+  * d/libqmi-glib5: update symbols file for new version
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Tue, 12 Oct 2021 16:17:09 +0200
+
+libqmi (1.28.6-1) experimental; urgency=medium
+
+  * New upstream version
+  * debian/libqmi-glib5.symbols:
+    - updated for the new version
+
+ -- Sebastien Bacher <seb128@ubuntu.com>  Tue, 22 Jun 2021 13:38:23 +0200
+
+libqmi (1.26.10-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Bug fix release:
+    + libqmi-glib: Fix internal QmiClientCtl leak in the QmiDevice when
+      using the QMUX endpoint.
+
+ -- Martin <debacle@debian.org>  Mon, 15 Feb 2021 16:03:10 +0000
+
+libqmi (1.26.8-0.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Source-only upload (Closes: #980558).
+
+ -- Martin <debacle@debian.org>  Wed, 20 Jan 2021 21:10:05 +0000
+
+libqmi (1.26.8-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version.
+
+ -- Martin <debacle@debian.org>  Sun, 10 Jan 2021 12:47:44 +0000
+
+libqmi (1.26.6-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version.
+  * debian/libqmi-glib5.symbols: add symbols for 1.26.6.
+
+ -- Martin <debacle@debian.org>  Wed, 07 Oct 2020 16:09:38 +0000
+
+libqmi (1.26.4-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version.
+
+ -- Martin <debacle@debian.org>  Sun, 23 Aug 2020 10:19:46 +0000
+
+libqmi (1.26.2-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version.
+  * Fix reproducibility by removing superfluous Makefiles (Closes: #963485).
+
+ -- Martin <debacle@debian.org>  Sun, 26 Jul 2020 12:36:00 +0000
+
+libqmi (1.26.0-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version.
+
+ -- Martin <debacle@debian.org>  Sun, 21 Jun 2020 11:38:14 +0000
+
+libqmi (1.25.900-0.1) experimental; urgency=medium
+
+  * Non-maintainer upload.
+  * Add package for GObject introspection (new upstream feature).
+  * debian/libqmi-glib5.symbols: 280 additional symbols.
+
+ -- Martin <debacle@debian.org>  Wed, 10 Jun 2020 21:39:17 +0000
+
+libqmi (1.24.12-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version.
+
+ -- Martin <debacle@debian.org>  Tue, 26 May 2020 22:12:07 +0000
+
+libqmi (1.24.8-1.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  [ Laurent Bigonville ]
+  * Add debian/gbp.conf file
+  * debian/control: Bump Standards-Version to 4.5.0 (no further changes)
+  * Mark libqmi-glib-doc with Build-profiles: <!nodoc> and move libglib2.0-doc
+    to BDI
+  * debian/control: Switch the build-dependency to python3 (Closes: #943157)
+  * Bump debhelper version to 12 and use dh_missing instead of dh_install
+    --list-missing
+  * Move qmi-proxy to /usr/libexec
+  * debian/control: Remove duplicate sections to please lintian
+  * debian/libqmi-glib5.symbols: Add Build-Depends-Package field
+  * Add a symlink for the documentation in /usr/share/doc and adjust the
+    docbase file. This fixes the doc-base-file-references-wrong-path lintian
+    warning
+
+  [ Helmut Grohne ]
+  * Fix FTCBFS
+    + Annotate python build dependency with :any.
+    + Disable gtk-doc for arch-only builds. (Closes: #913113)
+
+ -- Laurent Bigonville <bigon@debian.org>  Wed, 20 May 2020 16:23:06 +0200
+
+libqmi (1.24.8-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Update Vcs-* to salsa.
+  * Use Rules-Requires-Root: no
+
+ -- Martin <debacle@debian.org>  Thu, 30 Apr 2020 00:32:38 +0000
+
+libqmi (1.24.8-1) unstable; urgency=medium
+
+  * New upstream version
+
+ -- Sebastien Bacher <seb128@ubuntu.com>  Thu, 26 Mar 2020 23:26:00 +0100
+
+libqmi (1.24.6-2) unstable; urgency=medium
+
+  * debian/control,
+    debian/patches/versioned_python_binary.patch:
+    - don't use an unversioned python binary
+
+ -- Sebastien Bacher <seb128@ubuntu.com>  Thu, 27 Feb 2020 21:06:26 +0100
+
+libqmi (1.24.6-1) unstable; urgency=medium
+
+  * New upstream version
+  * debian/libqmi-glib5.symbols:
+    - refreshed the symbols for the new version
+
+ -- Sebastien Bacher <seb128@ubuntu.com>  Thu, 27 Feb 2020 20:27:01 +0100
+
+libqmi (1.22.4-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream release
+  * Removed debian/patches/git_reset-offset-before-2nd-call.patch,
+    included upstream.
+
+ -- Till Kamppeter <till.kamppeter@gmail.com>  Mon, 19 Aug 2019 11:52:41 +0200
+
+libqmi (1.22.0-1.3) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * enable verbose build logs (Closes: #900909)
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Fri, 02 Aug 2019 13:07:56 +0200
+
+libqmi (1.22.0-1.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Add debian/patches/git_reset-offset-before-2nd-call.patch from upstream.
+    - equivalent to 1.22.2 release except the broken manpages in that release.
+
+ -- Andreas Henriksson <andreas@fatal.se>  Tue, 12 Mar 2019 14:19:35 +0100
+
+libqmi (1.22.0-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload
+  * Bump Build-Depends on libmbim-glib-dev to 1.18.0 to fix build
+    (Closes: #921321)
+
+ -- Jeremy Bicha <jbicha@debian.org>  Thu, 07 Feb 2019 18:22:46 -0500
+
+libqmi (1.22.0-1) unstable; urgency=medium
+
+  * New upstream release
+    - Needed by ModemManager 1.10.
+  * debian/patches/0001-qmicli-remove-implicity-casts-to-GDestroyNotify-in-g.patch:
+    Dropped, included upstream.
+  * debian/libqmi-glib5.symbols: update symbols for new release.
+
+ -- Till Kamppeter <till.kamppeter@gmail.com>  Tue, 05 Feb 2019 23:24:39 +0100
+
+libqmi (1.20.0-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Add upstream fix for FTBFS with glib 2.58,
+    thanks to Juhani Numminen. (Closes: #908016)
+
+ -- Adrian Bunk <bunk@debian.org>  Sat, 22 Sep 2018 22:05:32 +0300
+
+libqmi (1.20.0-1) unstable; urgency=medium
+
+  * New upstream version 1.20.0. (Closes: #887975)
+  * debian/patches/0001-utils-drop-useless-g_file_test-call.patch: dropped,
+    included upstream.
+  * debian/libqmi-glib5.symbols: update symbols for new release.
+  * debian/control: changing Maintainer field to claim the package. Marius is
+    no longer interested in maintaining it.
+  * debian/control: bump Standards-Version to 4.1.3.
+
+ -- Mathieu Trudel-Lapierre <mathieu.tl@gmail.com>  Thu, 01 Mar 2018 09:39:11 -0500
+
+libqmi (1.18.0-3) unstable; urgency=medium
+
+  * Remove myself from Uploaders.
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 21 Oct 2017 00:49:31 +0200
+
+libqmi (1.18.0-2) unstable; urgency=medium
+
+  * Drop useless g_file_test() call.
+    Fixes FTBFS with glib2.0 >= 2.52.1 which changed the behaviour of
+    g_file_test(). (Closes: #865579)
+  * Bump Standards-Version to 4.0.0
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 06 Jul 2017 21:22:47 +0200
+
+libqmi (1.18.0-1) unstable; urgency=medium
+
+  * New upstream version 1.18.0
+  * Bump Build-Depends on libglib2.0-dev to (>= 2.36)
+  * Update libqmi-glib5 symbols file
+  * Enable new qmi-firmware-update tool
+  * Enable GUdev support for qmi-firmware-update
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 17 Jun 2017 12:46:52 +0200
+
+libqmi (1.16.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Bump debhelper compat level to 10.
+  * Drop Build-Depends on intltool.
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 08 Nov 2016 16:20:11 +0100
+
+libqmi (1.16.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Enable QMi-over-MBIM support, which is required by new Sierra devices to
+    work in MBIM mode.
+  * Update symbols file.
+  * Only install the upstream documentation files once.
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 08 Jul 2016 00:08:53 +0200
+
+libqmi (1.14.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Bump Standards-Version to 3.9.8.
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 15 Apr 2016 00:55:28 +0200
+
+libqmi (1.14.0-2) unstable; urgency=medium
+
+  * Update debian/copyright.
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 22 Mar 2016 18:35:07 +0100
+
+libqmi (1.14.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Use https:// for upstream homepage.
+  * Rename libqmi-glib1 → libqmi-glib5 for the upstream SONAME bump.
+  * Update symbols files accordingly.
+  * Run wrap-and-sort -at.
+  * Bump Standards-Version to 3.9.7.
+  * Drop libqmi-glib5-dbg now that we have automatic dbgsym packages.
+  * Ensure proper upgrade from libqmi-glib5-dbg to new dbgsym packages by
+    using dh_strip --dbgsym-migration. Bump Build-Depends on debhelper
+    accordingly.
+  * Drop debian/qmicli.1 since we use the upstream man page.
+  * Install bash-completion file for qmicli.
+  * Drop obsolete debian/README.source.
+  * Rename libqmi-glib.doc-base → libqmi-glib-doc.doc-base so the doc-base
+    support file is actually installed.
+
+ -- Michael Biebl <biebl@debian.org>  Sat, 19 Mar 2016 00:40:30 +0100
+
+libqmi (1.12.6-1) unstable; urgency=medium
+
+  * Upload to unstable.
+  * New upstream release.
+  * Add myself to Uploaders.
+
+ -- Michael Biebl <biebl@debian.org>  Thu, 07 May 2015 00:51:05 +0200
+
+libqmi (1.12.4-2) experimental; urgency=medium
+
+  * Team upload.
+  * Mark binary packages as linux-any.
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 13 Feb 2015 21:31:59 +0100
+
+libqmi (1.12.4-1) experimental; urgency=medium
+
+  * Team upload.
+
+  [ Marius B. Kotsbak ]
+  * Add gbp config for experimental branch.
+
+  [ Michael Biebl ]
+  * Imported Upstream version 1.12.4.
+  * Update symbols file.
+  * Update Vcs-Browser URL to use cgit and https.
+
+ -- Michael Biebl <biebl@debian.org>  Fri, 13 Feb 2015 09:43:06 +0100
+
+libqmi (1.12.2-1) experimental; urgency=medium
+
+  [ Marius B. Kotsbak ]
+  * Imported Upstream version 1.12.2 (Closes: #772328)
+  * Updated symbols file for libqmi-glib1 package for new upstream 1.12.2.
+  * Update Debian standards version to 3.9.6
+  * Install NEWS file which includes the relevant upstream changes.
+
+ -- Marius B. Kotsbak <marius@kotsbak.com>  Sat, 31 Jan 2015 14:41:43 +0100
+
+libqmi (1.10.2-2) unstable; urgency=medium
+
+  * Team upload.
+
+  [ Marius B. Kotsbak ]
+  * Use dh_install --list-missing to show uninstalled files.
+  * Drop obsolete --with-tests configure option.
+
+  [ Michael Biebl ]
+  * Install man pages via dh_install.
+  * Use a strictly versioned dependency between libqmi-proxy and libqmi-glib1,
+    so the two packages don't get out of sync.
+  * Make any package linking against libqmi-glib1 get an explicit dependency
+    on libqmi-proxy. The qmi-proxy binary is used internally by libqmi-glib1
+    and the package split is an implementation detail to properly support
+    multi-arch. Convince lintian that this is intentional.
+  * Add Depends on libglib2.0-dev to libqmi-glib-dev as required by
+    qmi-glib.pc.
+
+ -- Michael Biebl <biebl@debian.org>  Tue, 16 Sep 2014 23:24:51 +0200
+
+libqmi (1.10.2-1) unstable; urgency=low
+
+  [ Marius B. Kotsbak ]
+  * New upstream stable version 1.10.2
+    - Fixed default internal proxy timeout for requests.
+    - Added initial support for the WDA service.
+    - Added support for cell location info retrieval.
+    - Added support for UIM card status retrieval.
+    - Added support to specify net open flags in the command line.
+    - Minor bugfixes
+
+ -- Marius B. Kotsbak <marius@kotsbak.com>  Tue, 29 Jul 2014 20:45:51 +0200
+
+libqmi (1.8.0-2) unstable; urgency=low
+
+  [ Marius B. Kotsbak ]
+  * Change libqmi to only recommend libqmi-proxy package.
+    It is possible to use the library without it (Closes: #754599).
+
+ -- Marius B. Kotsbak <marius@kotsbak.com>  Thu, 17 Jul 2014 20:35:17 +0200
+
+libqmi (1.8.0-1) unstable; urgency=low
+
+  [ Marius Kotsbak ]
+  * New upstream stable release 1.8.0 (Closes: #731002, #731907)
+    - Support for sharing the QMI port through multiple processes with the new
+      'qmi-proxy' infrastructure.
+    - api: added new known service ID enumeration values
+    - wds: added "Get Profile List" request/response
+    - wds: added "Get Profile Settings" request/response
+    - wds: added "Get Default Settings" request/response
+    - cli: add --wds-get-profile-list
+    - cli: add --wds-get-default-settings
+    - dms: 'SID' TLV in "Activate Manual" is a guint8, not a string
+    - Extended API with macros to check for the libqmi-glib version in use
+    - Setup libtool versioning in libqmi-glib
+    - Added initial support for the PBM (phonebook) service
+    - Added initial support for the UIM service
+    - Added initial support for the OMA (Open Mobile Alliance) service
+    - nas: added "Get Tx Rx Info" request/response
+    - wds: added "Get Packet Statistics" request/response
+    - dms: added support for the 'PRL' TLV in "Activate Manual"
+    - cli: add --nas-get-tx-rx-info
+    - cli: add --wds-get-packet-statistics
+    - cli: add --get-service-version-info
+    - cli: add --uim-read-transparent
+    - cli: add --uim-get-file-attributes
+    - cli: fix following network status until disconnected
+    - tests: use gtester to run unit tests
+    - Also fixed several minor bugs and memory leaks
+  * Replaced "help2man" in Debian package with the same from upstream
+
+ -- Marius B. Kotsbak <marius@kotsbak.com>  Sat, 21 Jun 2014 08:02:00 +0200
+
+libqmi (1.4.0-1) unstable; urgency=low
+
+  [ Marius B. Kotsbak ]
+  * New upstream stable release 1.4.0
+    - Fixed DMS activation code string handling
+    - Enhanced "start network" functionality in qmicli
+    - dms: fix minimum version requirement for DMS Get/Set Operating Mode
+    - nas: added 'Network Time' indication
+    - utils: fix reading sized uints in BE systems
+    - cli: add --dms-activate-manual
+    - cli: implemented setting System Selection Preference
+    - cli: fix technology preference persistence reporting
+    - cli: fix reading new PIN in '--dms-uim-change-pin'
+    - docs: always generate documentation at dist time
+    - tests: fixed BE/LE tests in BE systems (Closes: #709655)
+  * Drop patches applied upstream:
+    - "qmi-codegen-clean-up-compiled-python-files_git_1822155"
+    - "cli-all-sources-are-GPLv2_git_a5631ea"
+  * Symbols for libqmi-glib0 updated
+  * Change build-deps to Python 3
+  * Updated control Vcs-* fields to point to the Alioth hosted project
+  * Corrected debian/copyright: cli/* and libqmi-glib/test/* are GPL 2+.
+    Changed packaging to GPL 2+ too, as LGPL does not make sense here.
+  * Added help2man generating of manpages (new debian/rules target
+    "generate_manpages:". Edited result for qmi-network as it lacked
+    complete help. Workaround for upstream bgo #58755.
+  * Change to new configure option "--enable-gtk-doc-html"
+  * Updated upstream homepage reference to new page published
+  * Remove ${misc:Pre-Depends} from libqmi-glib-dev,
+      it is not containing any shared libs.
+  * Remove meaningless "All rights reserved" from debian/copyright
+
+ -- Marius B. Kotsbak <marius@kotsbak.com>  Sat, 08 Jun 2013 18:53:23 +0200
+
+libqmi (1.0-1) unstable; urgency=low
+
+  [ Marius B. Kotsbak ]
+  * Initial release (Closes: #692564)
+
+ -- Marius B. Kotsbak <marius@kotsbak.com>  Thu, 17 Jan 2013 21:12:14 +0100

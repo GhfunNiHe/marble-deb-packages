@@ -1,0 +1,65 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+# strip-nondeterminism is not available on the Fedora build host; this package
+# has no jars/archives that need normalization, so skip the step.
+override_dh_strip_nondeterminism:
+
+# dpkg-shlibdeps cannot run on the Fedora build host (no dpkg library metadata);
+# dependencies are declared manually in debian/control.
+override_dh_shlibdeps:
+
+override_dh_auto_install:
+	$(MAKE) PREFIX=/usr DESTDIR=debian/marble-device-support install
+	# Upstream bug fix (2026-10-12): marble-compositor-boost.service and
+	# marble-panel-on.service set ExecStart=/usr/local/sbin/<name>, but the
+	# Makefile installs those scripts as /usr/libexec/<name>.sh, so both
+	# services fail with 203/EXEC as shipped. Fix the installed copies.
+	sed -i \
+		-e 's|^ExecStart=/usr/local/sbin/marble-compositor-boost$$|ExecStart=/usr/libexec/marble-compositor-boost.sh|' \
+		-e 's|^ExecStart=/usr/local/sbin/marble-panel-on$$|ExecStart=/usr/libexec/marble-panel-on.sh|' \
+		debian/marble-device-support/usr/lib/systemd/system/marble-compositor-boost.service \
+		debian/marble-device-support/usr/lib/systemd/system/marble-panel-on.service
+	# hexagonrpcd (Debian adaptation): upstream ships the sensor registry
+	# drop-in for hexagonrpcd-sdsp.service, the Alpine/pmOS per-DSP unit that
+	# runs /usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -s -R /usr/share/qcom/.
+	# Debian's hexagonrpcd (source package hexagonrpc) is one unit that starts
+	# the same binary, but there it is a wrapper script reading
+	# hexagonrpcd_device/_dsp/_fw_dir from the environment, so the drop-in is
+	# retargeted at hexagonrpcd.service and rewritten to use those variables.
+	# Without this the daemon would look for the sensors on the ADSP and for a
+	# registry in /var/lib/droid-juicer/sensors, neither of which exists here.
+	install -Dm644 debian/hexagonrpcd.service.d/60-marble.conf \
+		debian/marble-device-support/usr/lib/systemd/system/hexagonrpcd.service.d/60-marble.conf
+	rm -rf debian/marble-device-support/usr/lib/systemd/system/hexagonrpcd-sdsp.service.d
+	sed -i \
+		-e 's|^Wants=hexagonrpcd-sdsp\.service$$|Wants=hexagonrpcd.service|' \
+		-e 's|^After=hexagonrpcd-sdsp\.service$$|After=hexagonrpcd.service|' \
+		debian/marble-device-support/usr/lib/systemd/system/iio-sensor-proxy.service.d/60-marble-sensors.conf
+	# Factory MAC restore for both radios, from the same persist file:
+	# copies wlan_mac.bin into the firmware directory, loads ath11k_pci (which
+	# the blacklist below keeps udev from autoloading), then programs the
+	# Bluetooth address (WLAN MAC minus one, the Xiaomi convention) through
+	# btmgmt because the stock NV blob carries no BD_ADDR. Pairs with the
+	# ath11k-load-wlan-mac-from-firmware patch in linux-redmi-marble.
+	install -Dm755 debian/mac-restore.sh \
+		debian/marble-device-support/usr/libexec/marble-mac-restore.sh
+	install -Dm644 debian/marble-mac-restore.service \
+		debian/marble-device-support/usr/lib/systemd/system/marble-mac-restore.service
+	install -Dm644 debian/wlan-mac.conf \
+		debian/marble-device-support/usr/lib/modprobe.d/marble-wlan.conf
+	# Accelerometer + proximity udev tag (82, appending to iio-sensor-proxy's
+	# own 80 rule which only tags the fastrpc nodes light+compass).
+	install -Dm644 debian/libssc-marble-sensors.rules \
+		debian/marble-device-support/usr/lib/udev/rules.d/82-libssc-marble-sensors.rules
+	# China Telecom data profile, shipped read-only under /usr/lib (NM picks
+	# read-only profiles from there since 1.36) so the rootfs has a working
+	# fallback data route without manual setup. autoconnect ships disabled:
+	# enabling it while the modem is still initializing trips the
+	# ModemManager mm_iface_modem_count_bearers assertion (upstream bug),
+	# so bring data up manually with 'nmcli con up ct-data' once registered.
+	install -d debian/marble-device-support/usr/lib/NetworkManager/system-connections
+	install -m 600 debian/network-manager/ct-data.nmconnection \
+		debian/marble-device-support/usr/lib/NetworkManager/system-connections/ct-data.nmconnection

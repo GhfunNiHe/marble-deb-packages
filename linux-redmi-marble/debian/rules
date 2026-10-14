@@ -1,0 +1,78 @@
+#!/usr/bin/make -f
+
+KERNEL_VER = 7.2.8
+KERNEL_ARCH = arm64
+SOC = sm8475
+PKG = linux-redmi-marble
+# Reference config with our deviations merged in; laid next to debian/ in the
+# upstream tree by the CI workflow before dpkg-buildpackage runs.
+KERNEL_CONFIG = config-xiaomi-marble.aarch64
+DTB_NAME = sm8475-xiaomi-marble
+
+export DH_VERBOSE = 1
+
+%:
+	dh $@
+
+# The kernel has no configure step; config sync happens in the build rule
+# (LOCALVERSION depends on the upstream HEAD commit resolved at build time).
+override_dh_auto_configure:
+
+override_dh_auto_build:
+	# Resolve the upstream main HEAD to a short hash for a traceable
+	# LOCALVERSION (same scheme as the sheng RPM spec). Falls back to
+	# "unknown" when offline.
+	COMMIT_HASH=$$(git ls-remote https://github.com/iLtanaka/linux-marble.git refs/heads/main 2>/dev/null | cut -c1-7); \
+		[ -n "$$COMMIT_HASH" ] || COMMIT_HASH=unknown; \
+		LOCALVERSION_FULL="-$(SOC)-g$$COMMIT_HASH"; \
+		echo "$$LOCALVERSION_FULL" > .lkv_suffix; \
+	\
+	export CCACHE_DIR="$${CCACHE_DIR:-$$HOME/.ccache}"; \
+	export CCACHE_MAXSIZE="$${CCACHE_MAXSIZE:-10G}"; \
+	export CCACHE_SLOPPINESS="file_macro,locale,time_macros"; \
+	export CCACHE_NOHASHDIR="true"; \
+	\
+	cp $(KERNEL_CONFIG) .config; \
+	\
+	make ARCH=$(KERNEL_ARCH) CC="ccache clang" LLVM=1 \
+		LOCALVERSION="$$LOCALVERSION_FULL" olddefconfig; \
+	make ARCH=$(KERNEL_ARCH) CC="ccache clang" LLVM=1 \
+		LOCALVERSION="$$LOCALVERSION_FULL" -j$$(nproc) \
+		Image modules qcom/$(DTB_NAME).dtb
+
+override_dh_auto_install:
+	# /boot carries only what the boot chain reads: the uncompressed Image
+	# (under the vmlinuz- name the postinst syncs to the ESP) and the DTB.
+	# No Image- duplicate, no Image.gz (U-Boot booti loads uncompressed), no
+	# System.map/config (debug/info only, never read at boot).
+	# The exact .config the kernel was built with ships next to the
+	# kernel.release marker instead of /boot.
+	KREL=$$(cat include/config/kernel.release); \
+	install -d \
+		debian/$(PKG)/boot \
+		debian/$(PKG)/usr/lib/modules/$$KREL/dtb/qcom \
+		debian/$(PKG)/usr/share/$(PKG); \
+	\
+	make ARCH=$(KERNEL_ARCH) CC="ccache clang" LLVM=1 \
+		INSTALL_MOD_PATH=debian/$(PKG) modules_install; \
+	rm -rf debian/$(PKG)/usr/lib/modules/$$KREL/build; \
+	rm -rf debian/$(PKG)/usr/lib/modules/$$KREL/source; \
+	\
+	install -Dm644 arch/$(KERNEL_ARCH)/boot/Image \
+		debian/$(PKG)/boot/vmlinuz-$$KREL; \
+	install -Dm644 arch/$(KERNEL_ARCH)/boot/dts/qcom/$(DTB_NAME).dtb \
+		debian/$(PKG)/boot/$(DTB_NAME)-$$KREL.dtb; \
+	install -Dm644 arch/$(KERNEL_ARCH)/boot/dts/qcom/$(DTB_NAME).dtb \
+		debian/$(PKG)/usr/lib/modules/$$KREL/dtb/qcom/$(DTB_NAME).dtb; \
+	\
+	install -Dm644 include/config/kernel.release \
+		debian/$(PKG)/usr/share/$(PKG)/kernel.release; \
+	install -Dm644 .config \
+		debian/$(PKG)/usr/share/$(PKG)/config-$$KREL
+
+# Kernel binaries must never be stripped; modules keep their debug info
+# (no INSTALL_MOD_STRIP), so skip dh_strip entirely.
+override_dh_strip:
+
+# Built on Fedora hosts without dpkg shlib metadata (see README).
+override_dh_shlibdeps:

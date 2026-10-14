@@ -1,0 +1,15 @@
+debian/77-mm-qdl-device-blacklist.rules usr/lib/udev/rules.d/
+etc/
+usr/bin/
+usr/sbin/
+usr/share/ModemManager/
+usr/share/bash-completion/
+usr/share/dbus-1/system-services/
+usr/share/dbus-1/system.d
+usr/share/polkit-1/
+usr/share/icons/
+usr/share/man/
+usr/share/locale/
+usr/lib/*/ModemManager/
+usr/lib/systemd
+usr/lib/udev

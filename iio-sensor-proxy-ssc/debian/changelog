@@ -1,0 +1,19 @@
+iio-sensor-proxy-ssc (3.9-1) unstable; urgency=medium
+
+  * Initial Debian packaging of iio-sensor-proxy 3.9 built with
+    -Dssc-support=enabled, so the sensors that Qualcomm's Sensor Core serves
+    through libssc (ambient light and compass by default, accelerometer and
+    proximity through udev rules) are exported on D-Bus as
+    net.hadess.SensorProxy together with the plain IIO sensors.
+  * Named iio-sensor-proxy-ssc and declared as the SSC-capable replacement for
+    iio-sensor-proxy: Provides/Replaces/Conflicts, following
+    sheng_fedora_packages/iio-sensor-proxy-ssc.spec. The archive package is
+    built without SSC support because libssc is not in Debian or Ubuntu, so
+    both cannot usefully be installed together.
+  * Nothing else is changed from upstream 3.9: the D-Bus name, the unit name
+    and the file layout are stock, which keeps marble-device-support's
+    iio-sensor-proxy.service drop-in and the rootfs enable list valid.
+  * Built with -Dudevrulesdir/-Dsystemdsystemunitdir so configure needs
+    neither udev.pc nor systemd.pc from the build container.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 01:28:00 +0800

@@ -1,0 +1,38 @@
+Source: libssc
+Section: libs
+Priority: optional
+Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ meson (>= 1.4.0),
+ ninja-build,
+ pkg-config,
+ libglib2.0-dev,
+ libqmi-glib-dev (>= 1.33.4),
+ libprotobuf-c-dev,
+ protobuf-compiler,
+ protobuf-c-compiler,
+Standards-Version: 4.6.2
+Homepage: https://codeberg.org/DylanVanAssche/libssc
+Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
+Vcs-Browser: https://github.com/GhfunNiHe/marble-deb-package
+Rules-Requires-Root: no
+
+Package: libssc
+Architecture: arm64
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: Qualcomm Sensor Core userspace library
+ libssc talks to the sensors that Qualcomm's Sensor Core (SSC) serves over
+ QRTR/QMI. It is what lets iio-sensor-proxy expose the accelerometer, ambient
+ light, proximity and compass of a mainline Linux Qualcomm phone such as the
+ Xiaomi POCO F5 / Redmi Note 12 Turbo (marble) on D-Bus.
+ .
+ The package ships libssc.so.2, ssccli (ssccli --sensor accelerometer is the
+ quickest way to see whether the DSP side answers at all) and the headers plus
+ pkg-config file that iio-sensor-proxy needs to build with -Dssc-support.
+ .
+ On marble the SSC service only appears on the QRTR bus a few seconds into the
+ boot, so debian/patches makes the lookup wait for it instead of giving up on
+ the first attempt.
