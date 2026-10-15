@@ -14,9 +14,27 @@ export DH_VERBOSE = 1
 %:
 	dh $@
 
+# debian/source/format is 3.0 (native), so dpkg-source does not apply
+# debian/patches/series for us. Apply it here instead of in the workflow:
+# the patch set stays part of the package, a local dpkg-buildpackage run
+# behaves like CI, and a patch that stops applying fails the build loudly
+# instead of silently shipping an unpatched kernel.
+#
 # The kernel has no configure step; config sync happens in the build rule
 # (LOCALVERSION depends on the upstream HEAD commit resolved at build time).
 override_dh_auto_configure:
+	@set -e; \
+	sed -e 's/#.*//' -e '/^[[:space:]]*$$/d' debian/patches/series | \
+	while read -r p; do \
+		if patch -p1 --dry-run --silent < debian/patches/$$p >/dev/null 2>&1; then \
+			echo "applying debian/patches/$$p"; \
+			patch -p1 --silent < debian/patches/$$p; \
+		elif patch -p1 -R --dry-run --silent < debian/patches/$$p >/dev/null 2>&1; then \
+			echo "debian/patches/$$p already applied"; \
+		else \
+			echo "FAIL: debian/patches/$$p does not apply" >&2; exit 1; \
+		fi; \
+	done
 
 # dh_auto_clean would run 'make distclean', and upstream's MRPROPER_FILES
 # lists the top-level debian/ directory (make deb-pkg creates it there, so

@@ -1,3 +1,25 @@
+linux-redmi-marble (7.2.8+marble7) unstable; urgency=medium
+
+  * Add debian/patches/iris-decode-order-output.patch: expose the standard
+    decoder display-delay controls on the HFI gen2 decoder capability table
+    and forward HFI_PROP_DECODE_ORDER_OUTPUT when userspace asks for it.
+    Without it the VA-API backend (libva-v4l2, built as its own package)
+    aborts in its decoder constructor with "S_CTRL DISPLAY_DELAY (Iris
+    decode-order patch required): Invalid argument" and every VA-API
+    application silently falls back to software decoding. marble reaches
+    that table through sm8450_data -> iris_vpu20_4v_gen2_desc ->
+    iris_hfi_gen2_vpu2_data, i.e. the sm8550 decoder caps, not the gen1 ones.
+  * debian/rules now applies debian/patches/series in its configure target.
+    debian/source/format is 3.0 (native), so dpkg-source never applies the
+    series: doing it in the package instead of in the workflow keeps a local
+    dpkg-buildpackage run identical to CI and makes a patch that stops
+    applying fail the build loudly instead of shipping an unpatched kernel
+    (the failure mode that already bit the ath11k MAC patch).
+  * Verify step: the built qcom-iris module must carry the new decode-order
+    handler, next to the existing ath11k wlan_mac.bin assertion.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 22:30:00 +0800
+
 linux-redmi-marble (7.2.8+marble6) unstable; urgency=medium
 
   * debian/rules: skip dh_auto_clean. Upstream's MRPROPER_FILES lists the
