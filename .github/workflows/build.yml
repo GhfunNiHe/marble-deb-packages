@@ -41,10 +41,15 @@ jobs:
 
     steps:
       # Build-Depends are enforced for every package below (no -d anywhere), so
-      # this list is the union of all the debian/control files. The notables:
-      # bash-completion (libqmi's meson hard-requires bash-completion.pc),
-      # dbus/polkitd/python3-dbus/python3-gi (ModemManager), python3-dev (libssc's
-      # meson mocking/ subdir hard-requires the Python headers).
+      # this list is the union of all the debian/control files, minus what the
+      # workflow itself builds and installs. The notables: bash-completion
+      # (libqmi's meson hard-requires bash-completion.pc), dbus/polkitd/
+      # python3-dbus/python3-gi (ModemManager), python3-dev (libssc's meson
+      # mocking/ subdir hard-requires the Python headers).
+      # libqmi-glib-dev is deliberately NOT here: the libqmi step below builds
+      # 1.39.1 and installs it before anything needs it, and trixie's 1.36.0
+      # would drag in libqmi-proxy, which is version-locked to libqmi-glib5
+      # (= 1.36.0-1) and breaks the next apt run once the upgrade lands.
       - name: Install build tools
         run: |
           apt-get update
@@ -54,7 +59,7 @@ jobs:
             rsync cpio kmod python3 zstd xz-utils lz4 \
             clang lld llvm \
             meson ninja-build pkg-config \
-            libglib2.0-dev libqmi-glib-dev libprotobuf-c-dev \
+            libglib2.0-dev libprotobuf-c-dev \
             protobuf-compiler protobuf-c-compiler \
             libgudev-1.0-dev libpolkit-gobject-1-dev \
             libmbim-glib-dev libqrtr-glib-dev libsystemd-dev libgirepository1.0-dev \
