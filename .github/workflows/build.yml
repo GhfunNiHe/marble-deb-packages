@@ -225,6 +225,12 @@ jobs:
           cp linux-redmi-marble/config-xiaomi-marble.aarch64 "$SRC/"
 
           cd "$SRC"
+          # debian/source/format is 3.0 (native), so dpkg-source ignores
+          # debian/patches: apply the ath11k WLAN MAC patch here, the same
+          # way the ModemManager step applies its two patches. The patched
+          # kernel and marble-mac-restore.service ship as a pair; without
+          # this the interface comes up with a random MAC every boot.
+          patch -p1 < "$GITHUB_WORKSPACE/linux-redmi-marble/ath11k-load-wlan-mac-from-firmware.patch"
           dpkg-buildpackage -b -us -uc
           echo "=== ccache stats ==="
           ccache --show-stats
@@ -263,6 +269,14 @@ jobs:
           if ! file "$RUNNER_TEMP/verify/boot/vmlinuz-$KREL" | grep -q 'ARM64 boot executable Image'; then
             echo "FAIL: vmlinuz is not an uncompressed arm64 Image"; exit 1
           fi
+          # ath11k is a module, so the WLAN MAC patch can only be checked in
+          # the built module. Assert on the firmware file name the patch
+          # introduces: an unpatched kernel still builds and boots, it just
+          # comes up with a random MAC.
+          MOD=$(find "$RUNNER_TEMP/verify" -name 'ath11k.ko.zst' | head -1)
+          [ -n "$MOD" ] || { echo "FAIL: ath11k.ko.zst not found in the kernel deb"; exit 1; }
+          zstdcat "$MOD" | strings | grep -q 'wlan_mac.bin' \
+            || { echo "FAIL: ath11k WLAN MAC patch is not in the built module"; exit 1; }
           echo "kernel deb verified: $DEB"
 
       # Same reasoning as the kernel: assert on the deliverable. The

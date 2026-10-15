@@ -1,3 +1,20 @@
+linux-redmi-marble (7.2.8+marble6) unstable; urgency=medium
+
+  * debian/rules: skip dh_auto_clean. Upstream's MRPROPER_FILES lists the
+    top-level debian/ directory (make deb-pkg creates it there, so
+    'make distclean' deletes it) - which is exactly where this packaging
+    lives. dh_auto_clean therefore wiped debian/control and dh_clean
+    aborted the clean target before the build even started. The tree
+    arrives as a fresh tarball, so there is nothing to clean.
+  * The CI workflow now applies the ath11k WLAN MAC patch explicitly.
+    debian/source/format is 3.0 (native), so dpkg-source ignores
+    debian/patches and the built kernel came up without it - a random MAC
+    every boot, which is what the patch and marble-mac-restore.service
+    exist to prevent. CI asserts on the wlan_mac.bin string in the built
+    ath11k module, the same way the local build did.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 10:36:00 +0800
+
 linux-redmi-marble (7.2.8+marble5) unstable; urgency=medium
 
   * Ship the exact .config the kernel was built with as

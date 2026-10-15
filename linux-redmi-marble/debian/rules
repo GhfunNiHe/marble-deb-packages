@@ -18,6 +18,12 @@ export DH_VERBOSE = 1
 # (LOCALVERSION depends on the upstream HEAD commit resolved at build time).
 override_dh_auto_configure:
 
+# dh_auto_clean would run 'make distclean', and upstream's MRPROPER_FILES
+# lists the top-level debian/ directory (make deb-pkg creates it there, so
+# mrproper deletes it) - which is exactly where this packaging lives. The
+# tree arrives as a fresh tarball anyway, so there is nothing to clean.
+override_dh_auto_clean:
+
 override_dh_auto_build:
 	# Resolve the upstream main HEAD to a short hash for a traceable
 	# LOCALVERSION (same scheme as the sheng RPM spec). Falls back to
