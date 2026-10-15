@@ -1,0 +1,42 @@
+--- a/src/libssc-sensor-light.c
++++ b/src/libssc-sensor-light.c
+@@ -80,17 +80,30 @@
+ 			return;
+ 		}
+ 
+-		/* Only report intensity in Lux, raw sensor values are ignored */
+-		if (msg->n_intensity >= 1) {
++		/*
++		 * Only report intensity in Lux, raw sensor values are ignored.
++		 *
++		 * ssc-sensor-light.proto documents two elements ([0] = Lux,
++		 * [1] = raw sensor value) which is what most firmwares send. Some
++		 * (e.g. the Xiaomi marble / AMS TCS3701 combo) send four elements
++		 * instead: [0] = an unused 0.0, [1] = Lux, [2] = gain,
++		 * [3] = integration time. Reporting [0] there pins the light sensor
++		 * at 0 lux forever (and iio-sensor-proxy with it), so use [1] for
++		 * that layout.
++		 */
++		if (msg->n_intensity >= 4)
++			intensity = msg->intensity[1];
++		else if (msg->n_intensity >= 1)
+ 			intensity = msg->intensity[0];
++		else
++			intensity = -1.0;
+ 
+-			/* Emit signal in main context instead of thread's context if intensity is positive */
+-			if (intensity >= 0.0) {
+-				ctx = g_slice_new0 (SignalContext);
+-				ctx->sensor = sensor;
+-				ctx->intensity = intensity;
+-				g_idle_add_full (G_PRIORITY_DEFAULT_IDLE, emit_signal, ctx, (GDestroyNotify)signal_context_free);
+-			}
++		/* Emit signal in main context instead of thread's context if intensity is positive */
++		if (intensity >= 0.0) {
++			ctx = g_slice_new0 (SignalContext);
++			ctx->sensor = sensor;
++			ctx->intensity = intensity;
++			g_idle_add_full (G_PRIORITY_DEFAULT_IDLE, emit_signal, ctx, (GDestroyNotify)signal_context_free);
+ 		}
+ 
+ 		ssc_light_response__free_unpacked (msg, NULL);

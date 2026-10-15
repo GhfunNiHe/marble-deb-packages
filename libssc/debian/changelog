@@ -1,3 +1,54 @@
+libssc (0.4.4-4) unstable; urgency=medium
+
+  * Restore 0002-libssc-light-four-element.patch and add
+    0003-libssc-light-trim-padding.patch. The previous 0.4.4-3 (upstream
+    parsing) shipped a desktop-visible ambient light sensor that always read
+    0 lux, which is worse than the patch it replaced.
+  * Measured on marble with 0002 present: the sensor works and reports a real
+    value, but only in intensity[1]. A 120 s capture in daylight gave
+    [0] = 0.0, [1] = 208.94, [2] = gain = 1.0, [3] = integration = 1024.0,
+    accuracy 3. Upstream master and Alpine/pmOS (which build vanilla 0.4.4
+    with no patches) read intensity[0], so on that stack the value is 0
+    forever; device pages listing the ambient light sensor as working
+    describe the sensor being enumerated.
+  * 0003 additionally trims trailing zero padding before unpacking: the
+    first report after enable is a zero-filled placeholder whose 4-byte
+    padding protobuf-c rejects as an invalid tag, which is what produced
+    "Failed to unpack light measurement message" right after enabling.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 22:45:00 +0800
+
+libssc (0.4.4-3) unstable; urgency=medium
+
+  * Drop 0002-libssc-light-four-element.patch. It only picked a different
+    element of the intensity array; the ambient light sensor on marble is
+    unusable either way: the firmware report ends in four zero bytes that
+    protobuf-c rejects as an invalid tag (fixed by trimming the padding, see
+    the worklog), and even then all three reported intensities are 0.0 with
+    accuracy 3, unaffected by screen brightness, so the desktop would show a
+    permanently dark room. Shipping the patch implied a working ALS that
+    does not exist; the package now keeps upstream's parsing behaviour.
+  * Accelerometer, gyroscope, compass and proximity are unaffected: the
+    light sensor simply reports 0 while everything else keeps working.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 22:30:00 +0800
+
+libssc (0.4.4-2) unstable; urgency=medium
+
+  * Light sensor: handle the four-element intensity layout the Xiaomi marble /
+    AMS TCS3701 combo sends ([0] = unused 0.0, [1] = Lux, [2] = gain,
+    [3] = integration time). ssc-sensor-light.proto documents two elements
+    ([0] = Lux, [1] = raw sensor value) which is what most firmwares send, so
+    the parser unconditionally reported intensity[0] - on marble that pinned
+    the sensor at 0.0 lx forever (iio-sensor-proxy and everything on top of it
+    saw 0 lux) while the real value sat in intensity[1]: 211.7 lx in one
+    60 s capture, 242.2 lx in the next, both with accuracy 3. Pick [1] when
+    four elements are present.
+  * Packaging moves to upstream 0.4.4 (the version already running on the
+    device; the previous local entry was 0.4.0-2).
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 21:25:00 +0800
+
 libssc (0.4.0-2) unstable; urgency=medium
 
   * Add python3-dev to Build-Depends. Upstream's meson.build descends into

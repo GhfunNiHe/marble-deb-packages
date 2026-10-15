@@ -1,0 +1,28 @@
+--- a/src/libssc-sensor-light.c
++++ b/src/libssc-sensor-light.c
+@@ -76,6 +76,25 @@
+ 		msg = ssc_light_response__unpack (NULL, buf->len, (const uint8_t *) buf->data);
+ 
+ 		if (msg == NULL) {
++			/*
++			 * The SSC frames reports on a 4-byte boundary and the padding
++			 * is zero filled; protobuf-c rejects it as an invalid tag and
++			 * then the whole measurement is lost. marble sends its first
++			 * (all zero, placeholder) report that way, which is how a
++			 * "Failed to unpack light measurement message" warning shows
++			 * up right after the sensor is enabled. Trim trailing zeros
++			 * and retry once before giving up.
++			 */
++			gsize len = buf->len;
++
++			while (len > 0 && buf->data[len - 1] == 0)
++				len--;
++
++			if (len != buf->len)
++				msg = ssc_light_response__unpack (NULL, len, (const uint8_t *) buf->data);
++		}
++
++		if (msg == NULL) {
+ 			g_warning ("Failed to unpack light measurement message");
+ 			return;
+ 		}

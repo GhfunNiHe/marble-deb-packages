@@ -1,1 +1,3 @@
 wait-for-qmi-service.patch
+0002-libssc-light-four-element.patch
+0003-libssc-light-trim-padding.patch
