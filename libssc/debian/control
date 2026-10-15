@@ -12,6 +12,7 @@ Build-Depends:
  libprotobuf-c-dev,
  protobuf-compiler,
  protobuf-c-compiler,
+ python3-dev,
 Standards-Version: 4.6.2
 Homepage: https://codeberg.org/DylanVanAssche/libssc
 Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git

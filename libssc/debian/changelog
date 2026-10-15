@@ -1,3 +1,14 @@
+libssc (0.4.0-2) unstable; urgency=medium
+
+  * Add python3-dev to Build-Depends. Upstream's meson.build descends into
+    mocking/ unconditionally, and mocking/ hard-requires a Python installation
+    with headers: it installs ssc-server/ssc-server-tests into bindir and the
+    generated protobuf Python bindings ship in the package, so this is not
+    test-only scaffolding. Skipping dh_auto_test is not enough; the build
+    itself needs Python.h.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 09:45:00 +0800
+
 libssc (0.4.0-1) unstable; urgency=medium
 
   * Initial Debian packaging of libssc 0.4.0

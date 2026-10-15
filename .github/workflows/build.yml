@@ -40,11 +40,11 @@ jobs:
       image: debian:trixie
 
     steps:
-      # Build-Depends are enforced for every package below (no -d anywhere),
-      # so this list is the union of all the debian/control files. The one
-      # that bites: libqmi's meson hard-requires bash-completion.pc, which
-      # only the bash-completion package ships; the dbus/polkitd/python3-*
-      # entries are ModemManager's Build-Depends for its test tooling.
+      # Build-Depends are enforced for every package below (no -d anywhere), so
+      # this list is the union of all the debian/control files. The notables:
+      # bash-completion (libqmi's meson hard-requires bash-completion.pc),
+      # dbus/polkitd/python3-dbus/python3-gi (ModemManager), python3-dev (libssc's
+      # meson mocking/ subdir hard-requires the Python headers).
       - name: Install build tools
         run: |
           apt-get update
@@ -60,7 +60,7 @@ jobs:
             libmbim-glib-dev libqrtr-glib-dev libsystemd-dev libgirepository1.0-dev \
             gtk-doc-tools gi-docgen help2man valac xsltproc systemd-dev \
             bash-completion gettext libdbus-1-dev dbus polkitd \
-            python3-dbus python3-gi libglib2.0-doc
+            python3-dbus python3-dev python3-gi libglib2.0-doc
 
       - name: Checkout
         uses: actions/checkout@v4
