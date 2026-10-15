@@ -230,7 +230,7 @@ jobs:
           # way the ModemManager step applies its two patches. The patched
           # kernel and marble-mac-restore.service ship as a pair; without
           # this the interface comes up with a random MAC every boot.
-          patch -p1 < "$GITHUB_WORKSPACE/linux-redmi-marble/ath11k-load-wlan-mac-from-firmware.patch"
+          patch -p1 < "$GITHUB_WORKSPACE/linux-redmi-marble/debian/patches/ath11k-load-wlan-mac-from-firmware.patch"
           dpkg-buildpackage -b -us -uc
           echo "=== ccache stats ==="
           ccache --show-stats
