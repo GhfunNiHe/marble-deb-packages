@@ -40,6 +40,11 @@ jobs:
       image: debian:trixie
 
     steps:
+      # Build-Depends are enforced for every package below (no -d anywhere),
+      # so this list is the union of all the debian/control files. The one
+      # that bites: libqmi's meson hard-requires bash-completion.pc, which
+      # only the bash-completion package ships; the dbus/polkitd/python3-*
+      # entries are ModemManager's Build-Depends for its test tooling.
       - name: Install build tools
         run: |
           apt-get update
@@ -53,7 +58,9 @@ jobs:
             protobuf-compiler protobuf-c-compiler \
             libgudev-1.0-dev libpolkit-gobject-1-dev \
             libmbim-glib-dev libqrtr-glib-dev libsystemd-dev libgirepository1.0-dev \
-            gtk-doc-tools gi-docgen help2man valac xsltproc systemd-dev
+            gtk-doc-tools gi-docgen help2man valac xsltproc systemd-dev \
+            bash-completion gettext libdbus-1-dev dbus polkitd \
+            python3-dbus python3-gi libglib2.0-doc
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -112,7 +119,7 @@ jobs:
           tar -xf "$RUNNER_TEMP/build/libqmi.tar.gz" -C "$RUNNER_TEMP/build/libqmi" --strip-components=1
           cp -a libqmi/debian "$RUNNER_TEMP/build/libqmi/debian"
           cd "$RUNNER_TEMP/build/libqmi"
-          dpkg-buildpackage -b -us -uc -d
+          dpkg-buildpackage -b -us -uc
           dpkg -i "$RUNNER_TEMP/build"/libqmi-glib5_*.deb "$RUNNER_TEMP/build"/libqmi-glib-dev_*.deb \
                   "$RUNNER_TEMP/build"/gir1.2-qmi-1.0_*.deb
           cp "$RUNNER_TEMP/build"/libqmi-*.deb "$RUNNER_TEMP/build"/gir1.2-qmi-*.deb "$GITHUB_WORKSPACE/out/" || true
@@ -135,7 +142,7 @@ jobs:
           patch -p1 < "$GITHUB_WORKSPACE/modemmanager/0002-shared-qmi-unlock-AFW-gated-GNSS-engines-at-LOC-start.patch"
           patch -p1 < "$GITHUB_WORKSPACE/modemmanager/0003-shared-qmi-derive-location-from-Position-Report-indi.patch"
           cp -a "$GITHUB_WORKSPACE/modemmanager/debian" debian
-          DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -us -uc -d
+          DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/modemmanager_*.deb "$RUNNER_TEMP/build"/libmm-glib0_*.deb \
              "$RUNNER_TEMP/build"/libmm-glib-dev_*.deb "$RUNNER_TEMP/build"/gir1.2-modemmanager-*.deb \
              "$GITHUB_WORKSPACE/out/"
