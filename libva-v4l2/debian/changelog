@@ -1,0 +1,31 @@
+libva-v4l2 (1.0.0-2) unstable; urgency=medium
+
+  * Package the radxa fork for marble unchanged: it is the only backend that
+    speaks the Iris stateful V4L2 M2M interface (upstream mxsrc/libva-v4l2 is
+    stateless-only), and Debian ships no Qualcomm VA driver at all, so
+    browsers and ffmpeg otherwise have no hardware decode path.
+  * Pairs with the iris decode-order patch in linux-redmi-marble: the backend
+    sets V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY{,_ENABLE} in its decoder
+    constructor and aborts with "Invalid argument" when the kernel does not
+    expose them. Verified on marble (SM7475): H.264, HEVC and VP9 1080p all
+    decode through /dev/video0 with this pair installed.
+  * Keeps the msm_drv_video.so alias, so vaInitialize() finds the driver with
+    no LIBVA_DRIVER_NAME/LIBVA_DRIVERS_PATH set, and the GStreamer VA rank
+    overrides in /usr/lib/environment.d + /etc/profile.d.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 22:30:00 +0800
+
+libva-v4l2 (1.0.0-1) unstable; urgency=medium
+
+  * Release 1.0.0.
+  * Build one ARM64 package on Noble for Trixie, Noble, and Resolute.
+  * Keep FastCV disabled and retain GStreamer VA session configuration.
+
+ -- Xilin Wu <sophon@radxa.com>  Thu, 10 Sep 2026 17:03:16 +0800
+
+libva-v4l2 (0.1.0-1) unstable; urgency=medium
+
+  * Initial Debian packaging for RadxaOS.
+  * Disable FastCV and retain GStreamer VA session configuration.
+
+ -- Xilin Wu <sophon@radxa.com>  Thu, 10 Sep 2026 16:00:00 +0800

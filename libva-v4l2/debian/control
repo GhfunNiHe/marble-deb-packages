@@ -1,0 +1,26 @@
+Source: libva-v4l2
+Section: video
+Priority: optional
+Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13), meson (>= 0.61), ninja-build, pkg-config,
+ libva-dev, libdrm-dev, libegl-dev, libgles-dev, libgbm-dev
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://github.com/radxa-pkg/libva-v4l2
+Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
+Vcs-Browser: https://github.com/GhfunNiHe/marble-deb-package
+
+Package: libva-v4l2
+Architecture: arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Provides: va-driver
+Description: VA-API backend for Qualcomm Iris stateful V4L2 devices
+ Hardware video decoding through the Qualcomm Iris stateful V4L2 M2M
+ interface, for SC8280XP (Radxa Dragon Q8B) and SM7475 (Xiaomi Poco F5 /
+ Redmi Note 12 Turbo, marble). Requires a kernel whose Iris driver exposes
+ the decoder display-delay controls (see the iris decode-order patch in
+ linux-redmi-marble) and a matching firmware.
+ .
+ Includes the MSM driver alias and GStreamer VA environment configuration.
+ FastCV video processing is disabled in distribution builds; H.264/HEVC
+ encoding is untested on marble.
