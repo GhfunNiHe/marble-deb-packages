@@ -23,6 +23,7 @@ on:
       - 'libqmi/**'
       - 'modemmanager/**'
       - 'iio-sensor-proxy-ssc/**'
+      - 'libva-v4l2/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
@@ -65,25 +66,14 @@ jobs:
             libmbim-glib-dev libqrtr-glib-dev libsystemd-dev libgirepository1.0-dev \
             gtk-doc-tools gi-docgen help2man valac xsltproc systemd-dev \
             bash-completion gettext libdbus-1-dev dbus polkitd \
-            python3-dbus python3-dev python3-gi libglib2.0-doc
+            python3-dbus python3-dev python3-gi libglib2.0-doc \
+            libva-dev libdrm-dev libegl-dev libgles-dev libgbm-dev
 
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup work dirs
         run: mkdir -p "$RUNNER_TEMP/build" "$GITHUB_WORKSPACE/out"
-
-      # ================================================================
-      # marble-device-support: overlay debian/ onto the upstream checkout
-      # ================================================================
-      - name: "Build: marble-device-support"
-        run: |
-          git clone --depth 1 https://github.com/iLtanaka/marble-device-support.git \
-            "$RUNNER_TEMP/build/marble-device-support"
-          cp -a marble-device-support/debian "$RUNNER_TEMP/build/marble-device-support/debian"
-          cd "$RUNNER_TEMP/build/marble-device-support"
-          dpkg-buildpackage -b -us -uc
-          cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
 
       # ================================================================
       # firmware: overlay debian/ onto the upstream *tag* snapshot. The tag
@@ -137,6 +127,22 @@ jobs:
           cp "$RUNNER_TEMP/build"/libqmi-*.deb "$RUNNER_TEMP/build"/gir1.2-qmi-*.deb "$GITHUB_WORKSPACE/out/" || true
 
       # ================================================================
+      # marble-device-support: overlay debian/ onto the upstream checkout.
+      # Runs after libqmi on purpose: marble-imsctl (the IMS / SMS-over-IMS
+      # enablement tool the package builds from debian/marble-imsctl.c) needs
+      # qmi-glib >= 1.38 for the IMSA bind and the IMSS "services enabled"
+      # message, and only the 1.39.1 dev package installed above provides it.
+      # ================================================================
+      - name: "Build: marble-device-support"
+        run: |
+          git clone --depth 1 https://github.com/iLtanaka/marble-device-support.git \
+            "$RUNNER_TEMP/build/marble-device-support"
+          cp -a marble-device-support/debian "$RUNNER_TEMP/build/marble-device-support/debian"
+          cd "$RUNNER_TEMP/build/marble-device-support"
+          dpkg-buildpackage -b -us -uc
+          cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
+
+      # ================================================================
       # modemmanager: git master, pinned to the commit the AFW-unlock and
       # Position-Report patches were authored against. Stock Debian MM
       # (1.24.2) fails '--location-enable-gps-nmea' with QMI error 46 on
@@ -151,8 +157,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/build/mm"
           tar -xf "$RUNNER_TEMP/build/mm.tar.gz" -C "$RUNNER_TEMP/build/mm" --strip-components=1
           cd "$RUNNER_TEMP/build/mm"
-          patch -p1 < "$GITHUB_WORKSPACE/modemmanager/0002-shared-qmi-unlock-AFW-gated-GNSS-engines-at-LOC-start.patch"
-          patch -p1 < "$GITHUB_WORKSPACE/modemmanager/0003-shared-qmi-derive-location-from-Position-Report-indi.patch"
+          # debian/source/format is 3.0 (quilt), so the patches in
+          # debian/patches/{,series} below are applied by
+          # 'dpkg-source --before-build' inside dpkg-buildpackage - no manual
+          # 'patch -p1' here.
           cp -a "$GITHUB_WORKSPACE/modemmanager/debian" debian
           DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/modemmanager_*.deb "$RUNNER_TEMP/build"/libmm-glib0_*.deb \
@@ -207,6 +215,32 @@ jobs:
           cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
 
       # ================================================================
+      # libva-v4l2: the VA-API backend for the Iris stateful V4L2 M2M
+      # decoder. Debian only ships Intel and Mesa VA drivers, so browsers
+      # and every VA-API consumer have no way to reach the Qualcomm driver
+      # without this package. Pinned to the radxa fork: upstream
+      # mxsrc/libva-v4l2 is stateless-only, while Iris is stateful.
+      #
+      # It pairs with the iris decode-order patch in
+      # linux-redmi-marble/debian/patches (the backend refuses to start
+      # without those controls: "S_CTRL DISPLAY_DELAY ... Invalid
+      # argument"), and installs v4l2_drv_video.so plus the
+      # msm_drv_video.so alias libva probes for Qualcomm parts, so plain
+      # vaInitialize() finds it with no environment variables.
+      # ================================================================
+      - name: "Build: libva-v4l2"
+        run: |
+          VACOMMIT=$(cat libva-v4l2/COMMIT)
+          wget -c -q -O "$RUNNER_TEMP/build/libva-v4l2.tar.gz" \
+            "https://github.com/radxa-pkg/libva-v4l2/archive/${VACOMMIT}/libva-v4l2-${VACOMMIT}.tar.gz"
+          mkdir -p "$RUNNER_TEMP/build/libva-v4l2"
+          tar -xf "$RUNNER_TEMP/build/libva-v4l2.tar.gz" -C "$RUNNER_TEMP/build/libva-v4l2" --strip-components=1
+          cp -a "$GITHUB_WORKSPACE/libva-v4l2/debian" "$RUNNER_TEMP/build/libva-v4l2/debian"
+          cd "$RUNNER_TEMP/build/libva-v4l2"
+          dpkg-buildpackage -b -us -uc
+          cp "$RUNNER_TEMP/build"/libva-v4l2_*.deb "$GITHUB_WORKSPACE/out/"
+
+      # ================================================================
       # Kernel: overlay debian/ + configs onto the upstream main snapshot
       # ================================================================
       # save-always keeps the cache warm across failed runs: a kernel build
@@ -235,11 +269,13 @@ jobs:
 
           cd "$SRC"
           # debian/source/format is 3.0 (native), so dpkg-source ignores
-          # debian/patches: apply the ath11k WLAN MAC patch here, the same
-          # way the ModemManager step applies its two patches. The patched
-          # kernel and marble-mac-restore.service ship as a pair; without
-          # this the interface comes up with a random MAC every boot.
-          patch -p1 < "$GITHUB_WORKSPACE/linux-redmi-marble/debian/patches/ath11k-load-wlan-mac-from-firmware.patch"
+          # debian/patches (unlike the ModemManager step, which is 3.0
+          # (quilt) and lets dpkg-source apply debian/patches/series).
+          # debian/rules applies the series in its configure target instead,
+          # so CI and a local dpkg-buildpackage run behave identically.
+          # The patches are a pair with userspace: ath11k WLAN MAC with
+          # marble-mac-restore.service (otherwise a random MAC every boot),
+          # iris decode-order output with the libva-v4l2 backend built above.
           dpkg-buildpackage -b -us -uc
           echo "=== ccache stats ==="
           ccache --show-stats
@@ -289,6 +325,15 @@ jobs:
           [ -n "$MOD" ] || { echo "FAIL: ath11k.ko.zst not found in the kernel deb"; exit 1; }
           zstdcat "$MOD" | strings | grep -q 'wlan_mac.bin' \
             || { echo "FAIL: ath11k WLAN MAC patch is not in the built module"; exit 1; }
+
+          # Same reasoning for the iris decode-order patch: an unpatched
+          # kernel builds and boots, it just cannot feed VA-API clients. The
+          # handler the patch adds is a static function, so it is present in
+          # the module's kallsyms table but not as an exported symbol.
+          IRIS=$(find "$RUNNER_TEMP/verify" -name 'qcom-iris.ko.zst' | head -1)
+          [ -n "$IRIS" ] || { echo "FAIL: qcom-iris.ko.zst not found in the kernel deb"; exit 1; }
+          zstdcat "$IRIS" | strings | grep -q 'iris_hfi_gen2_set_decode_order_output' \
+            || { echo "FAIL: iris decode-order patch is not in the built module"; exit 1; }
           echo "kernel deb verified: $DEB"
 
       # Same reasoning as the kernel: assert on the deliverable. The
@@ -378,6 +423,30 @@ jobs:
           done
           echo "iio-sensor-proxy-ssc deb verified: $DEB"
 
+      # What matters is that libva can find the driver: the .so has to sit in
+      # the multiarch dri directory and the msm alias has to point at it, or
+      # vaInitialize() silently probes nothing and every VA-API application
+      # falls back to software without saying so.
+      - name: Verify libva-v4l2 DEB
+        run: |
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/libva-v4l2_*.deb | head -1)
+          [ -n "$DEB" ] || { echo "FAIL: no libva-v4l2 deb built"; exit 1; }
+          dpkg-deb -f "$DEB" Package Version Architecture Depends Provides
+
+          dpkg-deb -f "$DEB" Provides | grep -q 'va-driver' \
+            || { echo "FAIL: missing Provides: va-driver"; exit 1; }
+          dpkg-deb -f "$DEB" Depends | grep -q 'libdrm' \
+            || { echo "FAIL: no libdrm dependency -> the driver links nothing"; exit 1; }
+
+          LIST=$(dpkg-deb -c "$DEB")
+          echo "$LIST" | grep -qE 'dri/v4l2_drv_video\.so$' \
+            || { echo "FAIL: v4l2_drv_video.so is not installed under .../dri"; exit 1; }
+          echo "$LIST" | grep -qE 'dri/msm_drv_video\.so -> v4l2_drv_video\.so$' \
+            || { echo "FAIL: the msm_drv_video.so alias is missing or points elsewhere"; exit 1; }
+          echo "$LIST" | grep -qE 'environment\.d/60-libva-v4l2\.conf$' \
+            || { echo "FAIL: GStreamer VA environment config is missing"; exit 1; }
+          echo "libva-v4l2 deb verified: $DEB"
+
       - name: Upload DEBs
         uses: actions/upload-artifact@v7
         with:
@@ -406,12 +475,20 @@ jobs:
           name: marble-debs
           path: debs
 
+      # dbgsym packages are kept in the build artifact (GitHub Actions) for
+      # debugging, but must not land in the release: they are huge and not
+      # useful to end users. Stage only the non-dbgsym debs for the release.
+      - name: Stage release DEBs (drop dbgsym)
+        run: |
+          rm -rf release-debs && mkdir -p release-debs
+          find debs -name '*.deb' ! -name '*-dbgsym*.deb' -exec cp -t release-debs {} +
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: marble-deb-${{ env.SHORT_SHA }}
           name: Marble Deb Packages (${{ env.SHORT_SHA }})
-          files: debs/**/*.deb
+          files: release-debs/**/*.deb
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
