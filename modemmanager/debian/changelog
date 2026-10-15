@@ -1,3 +1,18 @@
+modemmanager (1.25.95+loc1-2) experimental; urgency=medium
+
+  * Backport upstream 9317cbc4 "netlink: fix use-after-free calling
+    completion_fn on transaction completion" (2026-10-04), as patch 0004.
+    transaction_complete() read tr->completion_fn *after* g_hash_table_remove()
+    had already freed the transaction through the table's destroy notify, so
+    every completed netlink transaction called through a dangling function
+    pointer. It usually went unnoticed (the freed GSlice still held the old
+    value) and crashed with SIGSEGV at a bogus address as soon as the slice got
+    reused - on marble this showed up as ModemManager coredumps whenever the
+    network interfaces churn, e.g. when NetworkManager activates the ct-data
+    GSM profile while MM is still initializing the modem.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 20:05:00 +0800
+
 modemmanager (1.25.95+loc1-1) experimental; urgency=medium
 
   * New upstream release candidate

@@ -1,0 +1,3 @@
+0002-shared-qmi-unlock-AFW-gated-GNSS-engines-at-LOC-start.patch
+0003-shared-qmi-derive-location-from-Position-Report-indi.patch
+0004-netlink-fix-use-after-free-calling-completion_fn-on-t.patch
