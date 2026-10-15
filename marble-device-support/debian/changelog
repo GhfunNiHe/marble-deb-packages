@@ -1,3 +1,67 @@
+marble-device-support (1.0.0-12) unstable; urgency=medium
+
+  * Re-arm the sensor chain deterministically after an SLPI recovery. The
+    SLPI crashes once per boot (SNS_SEE fatal, ~79 s in) and remoteproc
+    recreates /dev/fastrpc-sdsp right after; hexagonrpcd only sometimes
+    notices. When it does not, the daemon keeps running against the pre-crash
+    DSP state and every sensor reading is dead while the unit still reports
+    active with zero restarts: the ambient light sensor returns a constant
+    0 lux and the accelerometer stays silent. Observed on two consecutive
+    boots (one self-healed, one did not - restarting hexagonrpcd by hand fixed
+    it every time).
+  * 82-libssc-marble-sensors.rules now wants marble-sensors-refresh.service
+    when the fastrpc-sdsp node appears, and that unit try-restarts
+    hexagonrpcd (a no-op when the daemon is not up yet, which is the common
+    case for the boot-time event).
+  * iio-sensor-proxy's drop-in gains PartOf=hexagonrpcd.service so the proxy
+    restarts with the daemon instead of holding sessions it opened before the
+    recovery.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 23:10:00 +0800
+
+marble-device-support (1.0.0-11) unstable; urgency=medium
+
+  * Keep the sensor chain alive across SLPI restarts. hexagonrpcd exits 0 when
+    its FastRPC session breaks (seen after "remoteproc0: crash detected in
+    slpi", an SNS_SEE fatal error 84 s into a boot), and systemd treats a clean
+    exit as success, so nothing brought it back; iio-sensor-proxy then
+    segfaults on the vanished backend and Debian's unit has no Restart= either,
+    leaving every sensor dead until a manual restart. hexagonrpcd now gets
+    Restart=always and iio-sensor-proxy Restart=on-failure (both RestartSec=2).
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 21:10:00 +0800
+
+marble-device-support (1.0.0-10) unstable; urgency=medium
+
+  * marble-imsctl apply: poll for IMS registration instead of failing on the
+    first look. The boot unit runs as soon as the modem announces its QMI
+    services, but the modem only registers after 81voltd has served its IMS
+    PDN request, ModemManager has created the bearer and the SIP registration
+    has gone through - tens of seconds later. On a cold boot the unit
+    therefore exited 2 ("not registered") even though IMS came up fine
+    seconds later, leaving a failed unit behind. 'apply' now retries the
+    registration query every 3 s for up to 90 s; 'check' keeps its strict
+    exit code for monitoring.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 20:15:00 +0800
+
+marble-device-support (1.0.0-9) unstable; urgency=medium
+
+  * Enable the modem's IMS services (SMS over IMS, VoLTE) on every boot.
+    The modem firmware does not register for IMS until the application
+    processor says which IMS services may run - on Android ims.apk does that
+    over QMI IMSS. Without it IMSA reports "not registered" (error code 0) and
+    SMS keeps going out over the CS domain, which China Telecom rejects (reject
+    cause 18, no 2G/3G fallback). With 81voltd hosting the IMS Data service so
+    the modem can bring the "IMS" APN bearer up, marble-imsctl sends the
+    "Set IMS Services Enabled Setting" message once and the modem registers by
+    itself: IMSA "registered", sms/voice/video "ready", MO/MT SMS and calls
+    verified on CHN-CT. The setting lives in modem NV, the boot unit only
+    re-applies it for good measure. Recommends 81voltd, which is required for
+    the IMS PDN.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 15 Oct 2026 19:25:00 +0800
+
 marble-device-support (1.0.0-8) unstable; urgency=medium
 
   * Ship a read-only NetworkManager profile for the China Telecom data

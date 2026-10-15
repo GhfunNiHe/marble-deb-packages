@@ -8,3 +8,14 @@
 #
 # Numbered 82 so it runs after 80 and can append to the tag with +=.
 SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-accel ssc-proximity"
+
+# marble: re-arm the sensor chain whenever the SLPI node (re)appears.
+#
+# The SLPI crashes once per boot (SNS_SEE fatal, ~79 s in) and remoteproc
+# recreates /dev/fastrpc-sdsp a moment later. hexagonrpcd does *not* always
+# notice: it keeps running against the pre-crash DSP state, and then every
+# sensor reading is dead even though the daemon looks healthy - the ambient
+# light sensor reports a constant 0 lux while the accelerometer and proximity
+# stay silent (ActiveState=active, NRestarts=0). Restarting hexagonrpcd by
+# hand fixes it every time, so do it automatically off the udev event.
+SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp", TAG+="systemd", ENV{SYSTEMD_WANTS}+="marble-sensors-refresh.service"

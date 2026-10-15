@@ -1,0 +1,13 @@
+[Unit]
+Description=Enable IMS services (VoLTE / SMS over IMS) on the Qualcomm modem
+Documentation=file:/usr/share/doc/marble-device-support/README.md
+After=qrtr-ns.service
+Wants=qrtr-ns.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/marble-ims-enable.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

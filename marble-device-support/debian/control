@@ -6,6 +6,10 @@ Build-Depends:
  debhelper-compat (= 13),
  gcc,
  make,
+ pkg-config,
+ libqmi-glib-dev,
+ libqrtr-glib-dev,
+ libglib2.0-dev,
 Standards-Version: 4.6.2
 Homepage: https://github.com/iLtanaka/marble-device-support
 Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
@@ -21,6 +25,10 @@ Depends: ${misc:Depends},
  bluez,
  util-linux (>= 2.34),
  libc6 (>= 2.34),
+ libglib2.0-0t64 | libglib2.0-0,
+ libqmi-glib5,
+ libqrtr-glib0,
+Recommends: 81voltd,
 Description: Hardware support layer for Xiaomi Poco F5 (marble)
  Distribution-agnostic hardware support layer for the Xiaomi Poco F5 /
  Redmi Note 12 Turbo (marble, Qualcomm Snapdragon 7+ Gen 2 / SM7475):
@@ -32,6 +40,10 @@ Description: Hardware support layer for Xiaomi Poco F5 (marble)
     factory WLAN MAC from the persist partition before ath11k loads, and
     programs the factory-derived Bluetooth address, without which the WCN6855
     stays unconfigured and invisible to bluetoothd)
+  * marble-ims-enable.service + marble-imsctl: enables the modem's IMS services
+    (SMS over IMS, VoLTE) through QMI IMSS, which is what makes SMS and calls
+    work on operators without a CS domain. Needs 81voltd, the IMS Data/IMSD
+    service the modem asks for the IMS PDN on, hence the Recommends.
   * modprobe blacklist for ath11k_pci, which marble-mac-restore.service loads
     after the MAC file is in place
   * systemd drop-ins for hexagonrpcd and iio-sensor-proxy, retargeted from the

@@ -11,6 +11,21 @@ override_dh_strip_nondeterminism:
 # dependencies are declared manually in debian/control.
 override_dh_shlibdeps:
 
+# IMS enablement (Debian overlay): the modem firmware keeps its IMS stack off
+# until the application processor states which IMS services may run - on Android
+# ims.apk does that over QMI IMSS. Without it the modem never starts registering
+# (IMSA reports "not registered, error code 0") and WMS keeps sending SMS over
+# the CS domain, which China Telecom rejects (reject cause 18). 81voltd hosts the
+# IMS Data service the modem asks for the "IMS" APN bearer on; marble-imsctl
+# sends the "Set IMS Services Enabled Setting" message and the unit re-applies it
+# on every boot (the modem stores it in NV, so the write is idempotent).
+override_dh_auto_build:
+	dh_auto_build
+	$(CC) -O2 -Wall -Wextra \
+		$(shell pkg-config --cflags qmi-glib qrtr-glib gio-2.0 glib-2.0) \
+		-o marble-imsctl debian/marble-imsctl.c \
+		$(shell pkg-config --libs qmi-glib qrtr-glib gio-2.0 glib-2.0)
+
 override_dh_auto_install:
 	$(MAKE) PREFIX=/usr DESTDIR=debian/marble-device-support install
 	# Upstream bug fix (2026-10-12): marble-compositor-boost.service and
@@ -38,6 +53,13 @@ override_dh_auto_install:
 		-e 's|^Wants=hexagonrpcd-sdsp\.service$$|Wants=hexagonrpcd.service|' \
 		-e 's|^After=hexagonrpcd-sdsp\.service$$|After=hexagonrpcd.service|' \
 		debian/marble-device-support/usr/lib/systemd/system/iio-sensor-proxy.service.d/60-marble-sensors.conf
+	# The upstream iio-sensor-proxy helper only tells the proxies about
+	# hexagonrpcd; it segfaults when hexagonrpcd goes away (SLPI recovery) and
+	# Debian's unit never restarts it, so the sensors stay dead until a manual
+	# restart. Same for hexagonrpcd itself, which exits 0 on a broken FastRPC
+	# session (see the drop-in above).
+	install -Dm644 debian/iio-sensor-proxy.service.d/70-marble-restart.conf \
+		debian/marble-device-support/usr/lib/systemd/system/iio-sensor-proxy.service.d/70-marble-restart.conf
 	# Factory MAC restore for both radios, from the same persist file:
 	# copies wlan_mac.bin into the firmware directory, loads ath11k_pci (which
 	# the blacklist below keeps udev from autoloading), then programs the
@@ -54,6 +76,14 @@ override_dh_auto_install:
 	# own 80 rule which only tags the fastrpc nodes light+compass).
 	install -Dm644 debian/libssc-marble-sensors.rules \
 		debian/marble-device-support/usr/lib/udev/rules.d/82-libssc-marble-sensors.rules
+	# SLPI recovery re-arm: the same udev rule wants this unit whenever
+	# /dev/fastrpc-sdsp (re)appears, because a stale hexagonrpcd looks healthy
+	# from the outside (active, no restarts) while every sensor reading is
+	# dead - the ambient light sensor reports 0 lux after the ~79 s SLPI
+	# crash of a boot. The unit try-restarts hexagonrpcd, and the proxy
+	# follows through the PartOf= in its drop-in.
+	install -Dm644 debian/marble-sensors-refresh.service \
+		debian/marble-device-support/usr/lib/systemd/system/marble-sensors-refresh.service
 	# China Telecom data profile, shipped read-only under /usr/lib (NM picks
 	# read-only profiles from there since 1.36) so the rootfs has a working
 	# fallback data route without manual setup. autoconnect ships disabled:
@@ -63,3 +93,11 @@ override_dh_auto_install:
 	install -d debian/marble-device-support/usr/lib/NetworkManager/system-connections
 	install -m 600 debian/network-manager/ct-data.nmconnection \
 		debian/marble-device-support/usr/lib/NetworkManager/system-connections/ct-data.nmconnection
+	# IMS / SMS over IMS / VoLTE enablement. Pairs with 81voltd (Debian package),
+	# which has to be present as well: it is the DCM/IMSD server the modem asks
+	# for the IMS PDN on. CS fallback does not exist on China Telecom, so
+	# without both pieces SMS and calls are impossible.
+	install -Dm755 marble-imsctl debian/marble-device-support/usr/libexec/marble-imsctl
+	install -Dm755 debian/marble-ims-enable.sh debian/marble-device-support/usr/libexec/marble-ims-enable.sh
+	install -Dm644 debian/marble-ims-enable.service \
+		debian/marble-device-support/usr/lib/systemd/system/marble-ims-enable.service
