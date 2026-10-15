@@ -114,6 +114,9 @@ jobs:
       # enablePosRequestNotification 0x12) that went upstream via MR !470
       # and are absent from the 1.38.0 that Debian trixie ships. ModemManager
       # (built right after) needs libqmi-glib >= 1.37.95 plus those TLVs.
+      # The built libqmi-proxy goes into the container with the rest: the gir
+      # package depends on it, and keeping the whole set at 1.39.1 leaves no
+      # archive libqmi-proxy behind to version-lock libqmi-glib5 to 1.36.0.
       # ================================================================
       - name: "Build: libqmi"
         run: |
@@ -126,7 +129,7 @@ jobs:
           cd "$RUNNER_TEMP/build/libqmi"
           dpkg-buildpackage -b -us -uc
           dpkg -i "$RUNNER_TEMP/build"/libqmi-glib5_*.deb "$RUNNER_TEMP/build"/libqmi-glib-dev_*.deb \
-                  "$RUNNER_TEMP/build"/gir1.2-qmi-1.0_*.deb
+                  "$RUNNER_TEMP/build"/gir1.2-qmi-1.0_*.deb "$RUNNER_TEMP/build"/libqmi-proxy_*.deb
           cp "$RUNNER_TEMP/build"/libqmi-*.deb "$RUNNER_TEMP/build"/gir1.2-qmi-*.deb "$GITHUB_WORKSPACE/out/" || true
 
       # ================================================================
