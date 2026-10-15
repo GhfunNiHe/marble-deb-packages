@@ -105,7 +105,11 @@ jobs:
           cp -a firmware-redmi-marble/debian "$SRC/debian"
           cd "$SRC"
           dpkg-buildpackage -b -us -uc
-          cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
+          # dpkg-buildpackage drops the .deb one level up from $SRC, i.e. in
+          # $RUNNER_TEMP/build/fw/ — NOT $RUNNER_TEMP/build/ — because we untar
+          # the firmware tarball into that wrapper dir. Copy from there, or the
+          # firmware deb never reaches out/ and Verify firmware DEB fails.
+          cp "$SRC"/../*.deb "$GITHUB_WORKSPACE/out/"
 
       # ================================================================
       # libqmi: git master, pinned. The QMI_LOC engine on this modem is
@@ -205,7 +209,11 @@ jobs:
       # ================================================================
       # Kernel: overlay debian/ + configs onto the upstream main snapshot
       # ================================================================
-      - name: Restore ccache
+      # save-always keeps the cache warm across failed runs: a kernel build
+      # that dies (OOM during the ThinLTO link, a verify-time assertion) still
+      # leaves its ccache populated, so the next run starts from that cache
+      # instead of a cold one and does not recompile everything it already did.
+      - name: Cache ccache
         uses: actions/cache@v6
         with:
           path: ~/.ccache
@@ -213,6 +221,7 @@ jobs:
           restore-keys: |
             ccache-linux-redmi-marble-${{ runner.os }}-${{ runner.arch }}-
             ccache-linux-redmi-marble-
+          save-always: true
 
       - name: "Build: linux-redmi-marble"
         run: |
