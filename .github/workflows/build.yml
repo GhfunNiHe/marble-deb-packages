@@ -11,6 +11,36 @@ name: Build Marble Deb Packages
 # (vmlinuz + DTB) and no initramfs is generated: this is the original port's
 # verified no-initramfs direct-boot route.
 
+# ================================================================
+# Source parameters
+#
+# Every source address used below lives here instead of inline in the build
+# steps, and each one can be overridden for a single run from the
+# workflow_dispatch form (`*_src_repo` = repo URL, `*_src_ref` = branch / tag
+# / commit). An empty ref keeps the default, which is still the pin this repo
+# has always built from — the debian/changelog version for the tag-based
+# packages and <pkg>/COMMIT for the pinned git snapshots — so a plain push
+# build fetches exactly what it fetched before; the parameters only add an
+# entry point for building a fork or another revision.
+# ================================================================
+env:
+  SRC_FIRMWARE_REPO: ${{ inputs.firmware_src_repo || 'https://github.com/iLtanaka/firmware-xiaomi-marble' }}
+  SRC_FIRMWARE_REF: ${{ inputs.firmware_src_ref }}          # empty = v<changelog version>
+  SRC_LIBQMI_REPO: ${{ inputs.libqmi_src_repo || 'https://gitlab.freedesktop.org/mobile-broadband/libqmi' }}
+  SRC_LIBQMI_REF: ${{ inputs.libqmi_src_ref }}              # empty = libqmi/COMMIT
+  SRC_DEVSUPPORT_REPO: ${{ inputs.devsupport_src_repo || 'https://github.com/iLtanaka/marble-device-support' }}
+  SRC_DEVSUPPORT_REF: ${{ inputs.devsupport_src_ref }}      # empty = upstream default branch
+  SRC_MODEMMANAGER_REPO: ${{ inputs.modemmanager_src_repo || 'https://gitlab.freedesktop.org/mobile-broadband/ModemManager' }}
+  SRC_MODEMMANAGER_REF: ${{ inputs.modemmanager_src_ref }}  # empty = modemmanager/COMMIT
+  SRC_LIBSSC_REPO: ${{ inputs.libssc_src_repo || 'https://codeberg.org/DylanVanAssche/libssc' }}
+  SRC_LIBSSC_REF: ${{ inputs.libssc_src_ref }}              # empty = v<changelog version>
+  SRC_IIO_REPO: ${{ inputs.iio_src_repo || 'https://gitlab.freedesktop.org/hadess/iio-sensor-proxy' }}
+  SRC_IIO_REF: ${{ inputs.iio_src_ref }}                    # empty = <changelog version>
+  SRC_LIBVA_REPO: ${{ inputs.libva_src_repo || 'https://github.com/radxa-pkg/libva-v4l2' }}
+  SRC_LIBVA_REF: ${{ inputs.libva_src_ref }}                # empty = libva-v4l2/COMMIT
+  SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/iLtanaka/linux-marble' }}
+  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}              # empty = main
+
 on:
   push:
     branches:
@@ -26,6 +56,72 @@ on:
       - 'libva-v4l2/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
+    inputs:
+      # 源码地址参数：留空 = 用上面的默认值（各包仓库里的版本源 / 上游地址）
+      firmware_src_repo:
+        description: 'firmware-redmi-marble 源码仓库地址 (repo URL)'
+        type: string
+        default: ''
+      firmware_src_ref:
+        description: 'firmware-redmi-marble 的 tag/分支/提交 (默认 v<changelog 版本>)'
+        type: string
+        default: ''
+      libqmi_src_repo:
+        description: 'libqmi 源码仓库地址 (默认 gitlab.freedesktop.org/mobile-broadband/libqmi)'
+        type: string
+        default: ''
+      libqmi_src_ref:
+        description: 'libqmi 的 tag/分支/提交 (默认 libqmi/COMMIT)'
+        type: string
+        default: ''
+      devsupport_src_repo:
+        description: 'marble-device-support 源码仓库地址 (默认 github.com/iLtanaka/marble-device-support)'
+        type: string
+        default: ''
+      devsupport_src_ref:
+        description: 'marble-device-support 的分支/tag (默认上游默认分支)'
+        type: string
+        default: ''
+      modemmanager_src_repo:
+        description: 'ModemManager 源码仓库地址 (默认 gitlab.freedesktop.org/mobile-broadband/ModemManager)'
+        type: string
+        default: ''
+      modemmanager_src_ref:
+        description: 'ModemManager 的 tag/分支/提交 (默认 modemmanager/COMMIT)'
+        type: string
+        default: ''
+      libssc_src_repo:
+        description: 'libssc 源码仓库地址 (默认 codeberg.org/DylanVanAssche/libssc)'
+        type: string
+        default: ''
+      libssc_src_ref:
+        description: 'libssc 的 tag/分支/提交 (默认 v<changelog 版本>)'
+        type: string
+        default: ''
+      iio_src_repo:
+        description: 'iio-sensor-proxy 源码仓库地址 (默认 gitlab.freedesktop.org/hadess/iio-sensor-proxy)'
+        type: string
+        default: ''
+      iio_src_ref:
+        description: 'iio-sensor-proxy 的 tag/分支/提交 (默认 <changelog 版本>)'
+        type: string
+        default: ''
+      libva_src_repo:
+        description: 'libva-v4l2 源码仓库地址 (默认 github.com/radxa-pkg/libva-v4l2)'
+        type: string
+        default: ''
+      libva_src_ref:
+        description: 'libva-v4l2 的 tag/分支/提交 (默认 libva-v4l2/COMMIT)'
+        type: string
+        default: ''
+      kernel_src_repo:
+        description: 'linux-marble 内核源码仓库地址 (默认 github.com/iLtanaka/linux-marble)'
+        type: string
+        default: ''
+      kernel_src_ref:
+        description: 'linux-marble 的分支/tag/提交 (默认 main)'
+        type: string
+        default: ''
 
 # Rebuilds supersede each other; never queue them up.
 concurrency:
@@ -39,6 +135,10 @@ jobs:
     timeout-minutes: 240
     container:
       image: debian:trixie
+    env:
+      # debian/rules would default to 10G, which is GitHub's entire
+      # per-repository cache budget: one kernel cache would evict everything.
+      CCACHE_MAXSIZE: 4G
 
     steps:
       # Build-Depends are enforced for every package below (no -d anywhere), so
@@ -73,7 +173,77 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup work dirs
-        run: mkdir -p "$RUNNER_TEMP/build" "$GITHUB_WORKSPACE/out"
+        run: |
+          mkdir -p "$RUNNER_TEMP/build" "$GITHUB_WORKSPACE/out"
+          # One ccache directory for every compile in the job. Without this the
+          # meson packages (which pick ccache up on their own) would write to
+          # ccache's default ~/.cache/ccache and the kernel rules to
+          # ~/.ccache — two caches, and only the second one is cached below.
+          mkdir -p "$HOME/.ccache"
+          echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
+
+      # ================================================================
+      # ccache: one pool for every C/C++ compile in this repo — all packages
+      # here and the manual kernel workflow share the key prefix.
+      #
+      # Restore and save are separate steps on purpose. The combined
+      # actions/cache action hides the save in its post step, which is
+      # declared `post-if: success()`, and its `save-always` input is
+      # deprecated because it "does not work as intended" — so a failed run
+      # silently throws away everything it compiled, and the failures worth
+      # retrying (a ThinLTO OOM, a verify assertion) all happen after the
+      # expensive compiles. `if: always()` on the save step is the documented
+      # replacement and sits at the end of the job, below.
+      #
+      # The primary key carries github.run_id because a cache entry can never
+      # be overwritten: with a stable key the first successful run would pin
+      # the entry for good and every later run would only ever read that stale
+      # copy. The restore keys then pick up the newest entry of any run.
+      # ================================================================
+      - name: Restore ccache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.ccache
+          key: ccache-marble-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-marble-${{ runner.os }}-${{ runner.arch }}-
+            ccache-marble-
+
+      # ================================================================
+      # Turn the parameters above (or, when a ref is left empty, the package's
+      # own version source: debian/changelog version or <pkg>/COMMIT) into one
+      # $SRC_<PKG>_URL per package. Every build step below reads that variable
+      # and never spells a source address out itself.
+      # ================================================================
+      - name: Resolve source URLs
+        run: |
+          # GitLab wants the project name inside the path, GitHub and
+          # Codeberg/Gitea do not; both forms resolve a branch, a tag or a
+          # commit, so a parameter can point at any of the three.
+          src_url() {   # $1 = repo URL, $2 = ref
+            case "$1" in
+              *gitlab*) printf '%s/-/archive/%s/%s-%s.tar.gz\n' "$1" "$2" "$(basename "$1")" "$2" ;;
+              *)        printf '%s/archive/%s.tar.gz\n' "$1" "$2" ;;
+            esac
+          }
+
+          FWVER=$(dpkg-parsechangelog -l firmware-redmi-marble/debian/changelog -SVersion | cut -d- -f1)
+          LSVER=$(dpkg-parsechangelog -l libssc/debian/changelog -SVersion | cut -d- -f1)
+          IIOVER=$(dpkg-parsechangelog -l iio-sensor-proxy-ssc/debian/changelog -SVersion | cut -d- -f1)
+
+          {
+            echo "SRC_FIRMWARE_URL=$(src_url "$SRC_FIRMWARE_REPO" "${SRC_FIRMWARE_REF:-v$FWVER}")"
+            echo "SRC_LIBQMI_URL=$(src_url "$SRC_LIBQMI_REPO" "${SRC_LIBQMI_REF:-$(cat libqmi/COMMIT)}")"
+            echo "SRC_MODEMMANAGER_URL=$(src_url "$SRC_MODEMMANAGER_REPO" "${SRC_MODEMMANAGER_REF:-$(cat modemmanager/COMMIT)}")"
+            echo "SRC_LIBSSC_URL=$(src_url "$SRC_LIBSSC_REPO" "${SRC_LIBSSC_REF:-v$LSVER}")"
+            echo "SRC_IIO_URL=$(src_url "$SRC_IIO_REPO" "${SRC_IIO_REF:-$IIOVER}")"
+            echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-$(cat libva-v4l2/COMMIT)}")"
+            echo "SRC_KERNEL_URL=$(src_url "$SRC_KERNEL_REPO" "${SRC_KERNEL_REF:-main}")"
+          } >> "$GITHUB_ENV"
+
+          # A wrong parameter shows up as a 404 in the next step, so print what
+          # each package is going to be fetched from.
+          grep '^SRC_.*_URL=' "$GITHUB_ENV" | sort
 
       # ================================================================
       # firmware: overlay debian/ onto the upstream *tag* snapshot. The tag
@@ -83,10 +253,7 @@ jobs:
       # ================================================================
       - name: "Build: firmware-redmi-marble"
         run: |
-          FWVER=$(dpkg-parsechangelog -l firmware-redmi-marble/debian/changelog -SVersion | cut -d- -f1)
-          echo "FWVER=$FWVER" >> "$GITHUB_ENV"
-          wget -c -q -O "$RUNNER_TEMP/build/firmware.tar.gz" \
-            "https://github.com/iLtanaka/firmware-xiaomi-marble/archive/refs/tags/v${FWVER}/firmware-xiaomi-marble-${FWVER}.tar.gz"
+          wget -c -q -O "$RUNNER_TEMP/build/firmware.tar.gz" "$SRC_FIRMWARE_URL"
           mkdir -p "$RUNNER_TEMP/build/fw"
           tar -xf "$RUNNER_TEMP/build/firmware.tar.gz" -C "$RUNNER_TEMP/build/fw"
           SRC=$(find "$RUNNER_TEMP/build/fw" -mindepth 1 -maxdepth 1 -type d | head -1)
@@ -114,9 +281,7 @@ jobs:
       # ================================================================
       - name: "Build: libqmi"
         run: |
-          LIBQMI_COMMIT=$(cat libqmi/COMMIT)
-          wget -c -q -O "$RUNNER_TEMP/build/libqmi.tar.gz" \
-            "https://gitlab.freedesktop.org/mobile-broadband/libqmi/-/archive/${LIBQMI_COMMIT}/libqmi-${LIBQMI_COMMIT}.tar.gz"
+          wget -c -q -O "$RUNNER_TEMP/build/libqmi.tar.gz" "$SRC_LIBQMI_URL"
           mkdir -p "$RUNNER_TEMP/build/libqmi"
           tar -xf "$RUNNER_TEMP/build/libqmi.tar.gz" -C "$RUNNER_TEMP/build/libqmi" --strip-components=1
           cp -a libqmi/debian "$RUNNER_TEMP/build/libqmi/debian"
@@ -135,8 +300,16 @@ jobs:
       # ================================================================
       - name: "Build: marble-device-support"
         run: |
-          git clone --depth 1 https://github.com/iLtanaka/marble-device-support.git \
-            "$RUNNER_TEMP/build/marble-device-support"
+          # A ref is only used when one was filled in: --branch takes a branch
+          # or a tag name, and with no ref the clone follows upstream's default
+          # branch, which is what this package has always built from.
+          if [ -n "$SRC_DEVSUPPORT_REF" ]; then
+            git clone --depth 1 --branch "$SRC_DEVSUPPORT_REF" \
+              "$SRC_DEVSUPPORT_REPO" "$RUNNER_TEMP/build/marble-device-support"
+          else
+            git clone --depth 1 "$SRC_DEVSUPPORT_REPO" \
+              "$RUNNER_TEMP/build/marble-device-support"
+          fi
           cp -a marble-device-support/debian "$RUNNER_TEMP/build/marble-device-support/debian"
           cd "$RUNNER_TEMP/build/marble-device-support"
           dpkg-buildpackage -b -us -uc
@@ -151,9 +324,7 @@ jobs:
       # ================================================================
       - name: "Build: modemmanager"
         run: |
-          MM_COMMIT=$(cat modemmanager/COMMIT)
-          wget -c -q -O "$RUNNER_TEMP/build/mm.tar.gz" \
-            "https://gitlab.freedesktop.org/mobile-broadband/ModemManager/-/archive/${MM_COMMIT}/ModemManager-${MM_COMMIT}.tar.gz"
+          wget -c -q -O "$RUNNER_TEMP/build/mm.tar.gz" "$SRC_MODEMMANAGER_URL"
           mkdir -p "$RUNNER_TEMP/build/mm"
           tar -xf "$RUNNER_TEMP/build/mm.tar.gz" -C "$RUNNER_TEMP/build/mm" --strip-components=1
           cd "$RUNNER_TEMP/build/mm"
@@ -175,10 +346,7 @@ jobs:
       # ================================================================
       - name: "Build: libssc"
         run: |
-          LSVER=$(dpkg-parsechangelog -l libssc/debian/changelog -SVersion | cut -d- -f1)
-          echo "LSVER=$LSVER" >> "$GITHUB_ENV"
-          wget -c -q -O "$RUNNER_TEMP/build/libssc.tar.gz" \
-            "https://codeberg.org/DylanVanAssche/libssc/archive/v${LSVER}.tar.gz"
+          wget -c -q -O "$RUNNER_TEMP/build/libssc.tar.gz" "$SRC_LIBSSC_URL"
           mkdir -p "$RUNNER_TEMP/build/libssc"
           tar -xf "$RUNNER_TEMP/build/libssc.tar.gz" -C "$RUNNER_TEMP/build/libssc" --strip-components=1
 
@@ -202,10 +370,7 @@ jobs:
       # ================================================================
       - name: "Build: iio-sensor-proxy-ssc"
         run: |
-          IIOVER=$(dpkg-parsechangelog -l iio-sensor-proxy-ssc/debian/changelog -SVersion | cut -d- -f1)
-          echo "IIOVER=$IIOVER" >> "$GITHUB_ENV"
-          wget -c -q -O "$RUNNER_TEMP/build/iio.tar.gz" \
-            "https://gitlab.freedesktop.org/hadess/iio-sensor-proxy/-/archive/${IIOVER}/iio-sensor-proxy-${IIOVER}.tar.gz"
+          wget -c -q -O "$RUNNER_TEMP/build/iio.tar.gz" "$SRC_IIO_URL"
           mkdir -p "$RUNNER_TEMP/build/iio"
           tar -xf "$RUNNER_TEMP/build/iio.tar.gz" -C "$RUNNER_TEMP/build/iio" --strip-components=1
 
@@ -230,9 +395,7 @@ jobs:
       # ================================================================
       - name: "Build: libva-v4l2"
         run: |
-          VACOMMIT=$(cat libva-v4l2/COMMIT)
-          wget -c -q -O "$RUNNER_TEMP/build/libva-v4l2.tar.gz" \
-            "https://github.com/radxa-pkg/libva-v4l2/archive/${VACOMMIT}/libva-v4l2-${VACOMMIT}.tar.gz"
+          wget -c -q -O "$RUNNER_TEMP/build/libva-v4l2.tar.gz" "$SRC_LIBVA_URL"
           mkdir -p "$RUNNER_TEMP/build/libva-v4l2"
           tar -xf "$RUNNER_TEMP/build/libva-v4l2.tar.gz" -C "$RUNNER_TEMP/build/libva-v4l2" --strip-components=1
           cp -a "$GITHUB_WORKSPACE/libva-v4l2/debian" "$RUNNER_TEMP/build/libva-v4l2/debian"
@@ -243,27 +406,16 @@ jobs:
       # ================================================================
       # Kernel: overlay debian/ + configs onto the upstream main snapshot
       # ================================================================
-      # save-always keeps the cache warm across failed runs: a kernel build
-      # that dies (OOM during the ThinLTO link, a verify-time assertion) still
-      # leaves its ccache populated, so the next run starts from that cache
-      # instead of a cold one and does not recompile everything it already did.
-      - name: Cache ccache
-        uses: actions/cache@v6
-        with:
-          path: ~/.ccache
-          key: ccache-linux-redmi-marble-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('linux-redmi-marble/debian/rules', 'linux-redmi-marble/config-xiaomi-marble.aarch64') }}
-          restore-keys: |
-            ccache-linux-redmi-marble-${{ runner.os }}-${{ runner.arch }}-
-            ccache-linux-redmi-marble-
-          save-always: true
-
       - name: "Build: linux-redmi-marble"
         run: |
-          mkdir -p ~/.ccache
-          wget -c -q -O "$RUNNER_TEMP/build/linux-marble.tar.gz" \
-            "https://github.com/iLtanaka/linux-marble/archive/refs/heads/main/linux-marble.tar.gz"
-          tar -xf "$RUNNER_TEMP/build/linux-marble.tar.gz" -C "$RUNNER_TEMP/build"
-          SRC="$RUNNER_TEMP/build/linux-marble-main"
+          wget -c -q -O "$RUNNER_TEMP/build/linux-marble.tar.gz" "$SRC_KERNEL_URL"
+          # The tarball's top-level directory is <repo>-<ref>, so it changes
+          # name with a source parameter; untar into a wrapper dir and find it
+          # instead of assuming "linux-marble-main".
+          mkdir -p "$RUNNER_TEMP/build/kernel-src"
+          tar -xf "$RUNNER_TEMP/build/linux-marble.tar.gz" -C "$RUNNER_TEMP/build/kernel-src"
+          SRC=$(find "$RUNNER_TEMP/build/kernel-src" -mindepth 1 -maxdepth 1 -type d | head -1)
+          [ -n "$SRC" ] || { echo "FAIL: kernel tarball has no top-level directory"; exit 1; }
           cp -a linux-redmi-marble/debian "$SRC/debian"
           cp linux-redmi-marble/config-xiaomi-marble.aarch64 "$SRC/"
 
@@ -282,7 +434,10 @@ jobs:
 
           KREL=$(cat include/config/kernel.release)
           echo "KREL=$KREL" >> "$GITHUB_ENV"
-          cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
+          # dpkg-buildpackage drops the .deb next to the source tree, i.e. in
+          # the wrapper dir, not in $RUNNER_TEMP/build (same reason the
+          # firmware step copies from $SRC/..).
+          cp "$SRC"/../*.deb "$GITHUB_WORKSPACE/out/"
           {
             echo "### Kernel build result"
             echo ""
@@ -454,6 +609,17 @@ jobs:
           path: out/**/*.deb
           retention-days: 14
           if-no-files-found: error
+
+      # Whatever the job compiled stays cached even when a build or a verify
+      # assertion above failed (see the note on the restore step). The key is
+      # this run's, so this only ever adds an entry; if it already exists the
+      # action warns and skips instead of failing.
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.ccache
+          key: ccache-marble-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
 
   # ==================================================================
   # GitHub Release
