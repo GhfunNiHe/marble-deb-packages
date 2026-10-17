@@ -17,11 +17,11 @@ name: Build Marble Deb Packages
 # Every source address used below lives here instead of inline in the build
 # steps, and each one can be overridden for a single run from the
 # workflow_dispatch form (`*_src_repo` = repo URL, `*_src_ref` = branch / tag
-# / commit). An empty ref keeps the default, which is still the pin this repo
-# has always built from — the debian/changelog version for the tag-based
-# packages and <pkg>/COMMIT for the pinned git snapshots — so a plain push
-# build fetches exactly what it fetched before; the parameters only add an
-# entry point for building a fork or another revision.
+# / commit). The form shows the pins this repo builds by default: the
+# debian/changelog version for the tag-based packages and <pkg>/COMMIT for
+# the pinned git snapshots. Keep those defaults in sync when a version bumps.
+# The env fallbacks remain in place so a plain push build, or a form whose
+# field was cleared, still fetches the same revision.
 # ================================================================
 env:
   SRC_FIRMWARE_REPO: ${{ inputs.firmware_src_repo || 'https://github.com/iLtanaka/firmware-xiaomi-marble' }}
@@ -57,71 +57,73 @@ on:
       - '.github/workflows/build.yml'
   workflow_dispatch:
     inputs:
-      # 源码地址参数：留空 = 用上面的默认值（各包仓库里的版本源 / 上游地址）
+      # 源码地址参数：默认值就是本仓库当前构建的版本（changelog tag / COMMIT）。
+      # workflow_dispatch 的 default 不能引用表达式，所以版本号需要与
+      # debian/changelog、<pkg>/COMMIT 手动保持一致。
       firmware_src_repo:
         description: 'firmware-redmi-marble 源码仓库地址 (repo URL)'
         type: string
-        default: ''
+        default: 'https://github.com/iLtanaka/firmware-xiaomi-marble'
       firmware_src_ref:
-        description: 'firmware-redmi-marble 的 tag/分支/提交 (默认 v<changelog 版本>)'
+        description: 'firmware-redmi-marble 的 tag/分支/提交'
         type: string
-        default: ''
+        default: 'v20261008'
       libqmi_src_repo:
-        description: 'libqmi 源码仓库地址 (默认 gitlab.freedesktop.org/mobile-broadband/libqmi)'
+        description: 'libqmi 源码仓库地址 (repo URL)'
         type: string
-        default: ''
+        default: 'https://gitlab.freedesktop.org/mobile-broadband/libqmi'
       libqmi_src_ref:
-        description: 'libqmi 的 tag/分支/提交 (默认 libqmi/COMMIT)'
+        description: 'libqmi 的 tag/分支/提交'
         type: string
-        default: ''
+        default: 'd9e8af5cae7fdf9749baf87606568d3af4d03082'
       devsupport_src_repo:
-        description: 'marble-device-support 源码仓库地址 (默认 github.com/iLtanaka/marble-device-support)'
+        description: 'marble-device-support 源码仓库地址 (repo URL)'
         type: string
-        default: ''
+        default: 'https://github.com/iLtanaka/marble-device-support'
       devsupport_src_ref:
-        description: 'marble-device-support 的分支/tag (默认上游默认分支)'
+        description: 'marble-device-support 的分支/tag'
         type: string
-        default: ''
+        default: 'main'
       modemmanager_src_repo:
-        description: 'ModemManager 源码仓库地址 (默认 gitlab.freedesktop.org/mobile-broadband/ModemManager)'
+        description: 'ModemManager 源码仓库地址 (repo URL)'
         type: string
-        default: ''
+        default: 'https://gitlab.freedesktop.org/mobile-broadband/ModemManager'
       modemmanager_src_ref:
-        description: 'ModemManager 的 tag/分支/提交 (默认 modemmanager/COMMIT)'
+        description: 'ModemManager 的 tag/分支/提交'
         type: string
-        default: ''
+        default: '98777e693fcda3ea89151f76f3b2033532a8ef7f'
       libssc_src_repo:
-        description: 'libssc 源码仓库地址 (默认 codeberg.org/DylanVanAssche/libssc)'
+        description: 'libssc 源码仓库地址 (repo URL)'
         type: string
-        default: ''
+        default: 'https://codeberg.org/DylanVanAssche/libssc'
       libssc_src_ref:
-        description: 'libssc 的 tag/分支/提交 (默认 v<changelog 版本>)'
+        description: 'libssc 的 tag/分支/提交'
         type: string
-        default: ''
+        default: 'v0.4.4'
       iio_src_repo:
-        description: 'iio-sensor-proxy 源码仓库地址 (默认 gitlab.freedesktop.org/hadess/iio-sensor-proxy)'
+        description: 'iio-sensor-proxy 源码仓库地址 (repo URL)'
         type: string
-        default: ''
+        default: 'https://gitlab.freedesktop.org/hadess/iio-sensor-proxy'
       iio_src_ref:
-        description: 'iio-sensor-proxy 的 tag/分支/提交 (默认 <changelog 版本>)'
+        description: 'iio-sensor-proxy 的 tag/分支/提交'
         type: string
-        default: ''
+        default: '3.9'
       libva_src_repo:
-        description: 'libva-v4l2 源码仓库地址 (默认 github.com/radxa-pkg/libva-v4l2)'
+        description: 'libva-v4l2 源码仓库地址 (repo URL)'
         type: string
-        default: ''
+        default: 'https://github.com/radxa-pkg/libva-v4l2'
       libva_src_ref:
-        description: 'libva-v4l2 的 tag/分支/提交 (默认 libva-v4l2/COMMIT)'
+        description: 'libva-v4l2 的 tag/分支/提交'
         type: string
-        default: ''
+        default: '0e4ce1e05da1d0a92b342efc2090b9e4987035e1'
       kernel_src_repo:
-        description: 'linux-marble 内核源码仓库地址 (默认 github.com/iLtanaka/linux-marble)'
+        description: 'linux-marble 内核源码仓库地址 (repo URL)'
         type: string
-        default: ''
+        default: 'https://github.com/iLtanaka/linux-marble'
       kernel_src_ref:
-        description: 'linux-marble 的分支/tag/提交 (默认 main)'
+        description: 'linux-marble 的分支/tag/提交'
         type: string
-        default: ''
+        default: 'main'
 
 # Rebuilds supersede each other; never queue them up.
 concurrency:

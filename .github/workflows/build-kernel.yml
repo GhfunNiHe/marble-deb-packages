@@ -19,15 +19,15 @@ on:
         description: 'Publish as a prerelease (untick to publish a full release)'
         type: boolean
         default: true
-      # 源码参数：留空 = 上面的默认地址 / main 分支
+      # 源码参数：默认值就是本仓库当前构建用的上游地址和 main 分支。
       kernel_src_repo:
-        description: 'linux-marble 内核源码仓库地址 (默认 github.com/iLtanaka/linux-marble)'
+        description: 'linux-marble 内核源码仓库地址 (repo URL)'
         type: string
-        default: ''
+        default: 'https://github.com/iLtanaka/linux-marble'
       kernel_src_ref:
-        description: 'linux-marble 的分支/tag/提交 (默认 main)'
+        description: 'linux-marble 的分支/tag/提交'
         type: string
-        default: ''
+        default: 'main'
 
 # ================================================================
 # Source parameters, same contract as build-marble-debs.yml: the repo URL and
