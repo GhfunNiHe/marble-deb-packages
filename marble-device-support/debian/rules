@@ -101,3 +101,9 @@ override_dh_auto_install:
 	install -Dm755 debian/marble-ims-enable.sh debian/marble-device-support/usr/libexec/marble-ims-enable.sh
 	install -Dm644 debian/marble-ims-enable.service \
 		debian/marble-device-support/usr/lib/systemd/system/marble-ims-enable.service
+	# qbootctl marks the running A/B slot successful. Its unit only orders
+	# itself after local-fs.target, so wait for the boot_a/boot_b device units
+	# created by udev before it runs; otherwise ABL eventually falls back to
+	# fastboot when the slot retry counter drains.
+	install -Dm644 debian/qbootctl.service.d/wait-for-partitions.conf \
+		debian/marble-device-support/usr/lib/systemd/system/qbootctl.service.d/wait-for-partitions.conf

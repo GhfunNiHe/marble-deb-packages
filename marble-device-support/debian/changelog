@@ -1,3 +1,14 @@
+marble-device-support (1.0.0-13) unstable; urgency=medium
+
+  * Require qbootctl and ship a drop-in that orders qbootctl.service after the
+    boot_a and boot_b udev device units. Qualcomm ABL decrements the A/B slot
+    retry counter on every boot unless the running slot is marked successful;
+    without this the device eventually falls back to fastboot. The shipped
+    unit only orders itself after local-fs.target, which does not guarantee
+    udev has created the boot_a/boot_b symlinks.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Mon, 19 Oct 2026 18:39:16 +0800
+
 marble-device-support (1.0.0-12) unstable; urgency=medium
 
   * Re-arm the sensor chain deterministically after an SLPI recovery. The

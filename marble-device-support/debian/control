@@ -24,6 +24,7 @@ Depends: ${misc:Depends},
  alsa-ucm-conf,
  bluez,
  util-linux (>= 2.34),
+ qbootctl,
  libc6 (>= 2.34),
  libglib2.0-0t64 | libglib2.0-0,
  libqmi-glib5,
@@ -48,6 +49,9 @@ Description: Hardware support layer for Xiaomi Poco F5 (marble)
     after the MAC file is in place
   * systemd drop-ins for hexagonrpcd and iio-sensor-proxy, retargeted from the
    Alpine/pmOS hexagonrpcd-sdsp.service to Debian's hexagonrpcd.service
+  * qbootctl dependency and a drop-in that waits for boot_a/boot_b before
+    marking the Linux A/B slot successful, preventing ABL from draining the
+    retry counter and falling back to fastboot
   * sysctl (zram dirty-page tuning) and environment.d (GTK4/Wayland)
  .
  This package targets mainline Linux on marble (postmarketOS-style
