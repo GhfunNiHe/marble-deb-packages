@@ -2,5 +2,7 @@ out/
 *.deb
 *.buildinfo
 *.changes
+modemmanager/debian/modemmanager-dev/
+modemmanager/debian/modemmanager-doc/
 AGENTS.md
 .tools/
