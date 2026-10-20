@@ -1,3 +1,35 @@
+linux-redmi-marble (7.2.8+marble10) unstable; urgency=medium
+
+  * postinst: identify the ESP as vfat with either PARTLABEL=esp or filesystem
+    LABEL=ESP. The filesystem-label fallback supports the rootfs builder's
+    partitionless loop image, which cannot have a PARTLABEL, while unrelated
+    filesystems are still rejected.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Tue, 20 Oct 2026 08:35:00 +0800
+
+linux-redmi-marble (7.2.8+marble9) unstable; urgency=medium
+
+  * postinst: verify that /boot/efi is a vfat ESP with PARTLABEL=esp before
+    writing anything. This prevents a misconfigured fstab from making the
+    package overwrite an unrelated filesystem.
+  * postinst: fail an upgrade before replacing the kernel/DTB when the ESP
+    has no extlinux.conf, instead of warning and configuring a kernel that
+    the boot chain cannot reach. Existing boot entries are still preserved.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Tue, 20 Oct 2026 08:05:00 +0800
+
+linux-redmi-marble (7.2.8+marble8) unstable; urgency=medium
+
+  * postinst: require the ESP to be mounted at /boot/efi. A missing mount
+    point or an unmounted ESP now fails configuration with instructions to
+    mount it and rerun dpkg --configure -a, instead of silently skipping the
+    boot payload sync.
+  * postinst: write /extlinux/extlinux.conf only on the initial installation
+    (empty $2). Upgrades continue to refresh /marble/vmlinuz and the DTB but
+    preserve the existing boot configuration.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Tue, 20 Oct 2026 07:38:28 +0800
+
 linux-redmi-marble (7.2.8+marble7) unstable; urgency=medium
 
   * Add debian/patches/iris-decode-order-output.patch: expose the standard

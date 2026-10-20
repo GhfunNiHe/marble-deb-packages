@@ -1,11 +1,17 @@
 #!/bin/sh
 # postinst for linux-redmi-marble (no-initramfs direct-boot route, same as
 # the original project's verified path: alt.conf has no initrd line):
-#   1. depmod for the new kernel (modules live in /usr/lib/modules/<ver>,
+#   1. verify that /boot/efi is vfat and identifies as ESP by either
+#      PARTLABEL=esp or filesystem LABEL=ESP. The latter also covers the
+#      partitionless rootfs loop image, which cannot have a PARTLABEL.
+#   2. fail an upgrade if its boot entry is missing
+#   3. depmod for the new kernel (modules live in /usr/lib/modules/<ver>,
 #      loaded by udev/systemd after the rootfs mounts)
-#   2. ESP sync: uncompressed Image -> /marble/vmlinuz, DTB -> /marble/..., and a
-#      rewritten /extlinux/extlinux.conf pointing at PARTLABEL=linux.
-#   Skipped gracefully when /boot/efi is not mounted (chroot build envs).
+#   4. ESP sync: uncompressed Image -> /marble/vmlinuz and DTB -> /marble/...
+#   5. Only an initial installation creates /extlinux/extlinux.conf; upgrades
+#      leave the existing boot entry untouched.
+#   A missing, unmounted or unexpected ESP is a configuration error: fail with
+#   a recovery hint instead of writing boot files to the wrong filesystem.
 set -e
 
 # Kernel release: authoritative source is the installed marker file,
@@ -22,26 +28,72 @@ case "$1" in
 			exit 0
 		fi
 
-		# 1. module dependency database (ext4/UFS are built-in, so the
+		# 1. The boot chain cannot be updated without the expected ESP.
+		if [ ! -d /boot/efi ]; then
+			echo "linux-redmi-marble: ERROR: ESP mount point /boot/efi was not found." >&2
+			echo "  Ensure the ESP exists and is configured in /etc/fstab, mount it at /boot/efi," >&2
+			echo "  then run: dpkg --configure -a" >&2
+			exit 1
+		fi
+		if ! mountpoint -q /boot/efi; then
+			echo "linux-redmi-marble: ERROR: ESP is not mounted at /boot/efi." >&2
+			echo "  Mount the ESP at /boot/efi, then run: dpkg --configure -a" >&2
+			exit 1
+		fi
+
+		ESP_FSTYPE=$(findmnt -n -o FSTYPE --target /boot/efi 2>/dev/null || true)
+		if [ "$ESP_FSTYPE" != vfat ]; then
+			echo "linux-redmi-marble: ERROR: /boot/efi is not a vfat ESP (found: ${ESP_FSTYPE:-unknown})." >&2
+			echo "  Refusing to write boot files. Unmount it and mount the marble ESP" >&2
+			echo "  (PARTLABEL=esp or LABEL=ESP) at /boot/efi, then run:" >&2
+			echo "  dpkg --configure -a" >&2
+			exit 1
+		fi
+
+		ESP_PARTLABEL=$(findmnt -n -o PARTLABEL --target /boot/efi 2>/dev/null || true)
+		ESP_LABEL=$(findmnt -n -o LABEL --target /boot/efi 2>/dev/null || true)
+		if [ "$ESP_PARTLABEL" != esp ] &&
+		   [ "$ESP_LABEL" != ESP ] && [ "$ESP_LABEL" != esp ]; then
+			echo "linux-redmi-marble: ERROR: /boot/efi is vfat but has PARTLABEL='${ESP_PARTLABEL:-<empty>}' and LABEL='${ESP_LABEL:-<empty>}'." >&2
+			echo "  Expected PARTLABEL=esp or filesystem LABEL=ESP." >&2
+			echo "  Unmount it and mount the marble ESP at /boot/efi, then run:" >&2
+			echo "  dpkg --configure -a" >&2
+			exit 1
+		fi
+
+		# 2. Never replace a working kernel/DTB if the upgrade has no boot
+		#    entry to reach them. Recovery must happen before configuration.
+		if [ -n "$2" ] && [ ! -f /boot/efi/extlinux/extlinux.conf ]; then
+			echo "linux-redmi-marble: ERROR: upgrade found no /boot/efi/extlinux/extlinux.conf." >&2
+			echo "  The kernel and DTB were not replaced. Restore the existing boot entry" >&2
+			echo "  on the ESP, then run: dpkg --configure -a" >&2
+			exit 1
+		fi
+
+		# 3. module dependency database (ext4/UFS are built-in, so the
 		#    kernel mounts root directly; extra drivers load from rootfs)
 		depmod -a "$KREL"
 
-		# 2. ESP sync
-		if mountpoint -q /boot/efi; then
-			mkdir -p /boot/efi/marble /boot/efi/extlinux
-			# /boot/vmlinuz-<ver> IS the uncompressed arm64 Image (U-Boot
-			# booti requirement), just renamed on the ESP like the original
-			# project's manual step.
-			cp /boot/vmlinuz-"$KREL" /boot/efi/marble/vmlinuz
-			cp /boot/sm8475-xiaomi-marble-"$KREL".dtb /boot/efi/marble/sm8475-xiaomi-marble.dtb
+		# 4. Sync the kernel and DTB on both installation and upgrade.
+		mkdir -p /boot/efi/marble
+		# /boot/vmlinuz-<ver> IS the uncompressed arm64 Image (U-Boot
+		# booti requirement), just renamed on the ESP like the original
+		# project's manual step.
+		cp /boot/vmlinuz-"$KREL" /boot/efi/marble/vmlinuz
+		cp /boot/sm8475-xiaomi-marble-"$KREL".dtb /boot/efi/marble/sm8475-xiaomi-marble.dtb
+
+		if [ -z "$2" ]; then
+			# Initial installation only. $2 is the previously configured
+			# version on upgrades, so never overwrite an existing boot entry
+			# after the user may have edited it.
+			mkdir -p /boot/efi/extlinux
 
 			# root= is NOT hardcoded. The source of truth is the "/" entry of
 			# /etc/fstab, which is where the rootfs build (and the user) decides
 			# which partition to boot from; PARTLABEL=/UUID=/LABEL=/dev/... are
 			# all valid kernel root= values, so the fstab source field is passed
 			# through verbatim. Falls back to whatever the ESP already carries,
-			# then to the established default. This keeps extlinux.conf in sync
-			# with fstab instead of hardcoding one partition name in two repos.
+			# then to the established default.
 			ROOT_SPEC=$(awk '!/^#/ && $2 == "/" { print $1; exit }' /etc/fstab 2>/dev/null || true)
 			if [ -z "$ROOT_SPEC" ] && [ -f /boot/efi/extlinux/extlinux.conf ]; then
 				ROOT_SPEC=$(sed -n 's/.*[[:space:]]root=\([^ ]*\).*/\1/p' \
@@ -64,9 +116,9 @@ label marble
 	fdt /marble/sm8475-xiaomi-marble.dtb
 	append root=$ROOT_SPEC rootwait rw console=tty0 loglevel=4 printk.devkmsg=on pstore.compress=none log_buf_len=2M msm_geni_serial.con_enabled=0 clk_ignore_unused pd_ignore_unused regulator_ignore_unused fw_devlink=permissive pcie_aspm=off
 EOF
-			echo "linux-redmi-marble: ESP synced (vmlinuz + dtb + extlinux.conf) for $KREL, root=$ROOT_SPEC"
+			echo "linux-redmi-marble: ESP synced (vmlinuz + dtb) and extlinux.conf created for $KREL, root=$ROOT_SPEC"
 		else
-			echo "linux-redmi-marble: /boot/efi not mounted; mount ESP and reinstall to sync" >&2
+			echo "linux-redmi-marble: ESP synced (vmlinuz + dtb) for $KREL; existing extlinux.conf left unchanged"
 		fi
 		;;
 esac

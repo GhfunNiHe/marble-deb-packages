@@ -5,9 +5,12 @@ name: Build Kernel Deb
 # it gets its own workflow, mirroring sheng_fedora_packages/build-kernel.yml.
 #
 # Same layout contract as build-marble-debs.yml: vmlinuz (uncompressed Image)
-# + DTB in /boot, no initramfs. postinst syncs both to the ESP when /boot/efi
-# is mounted — mounting it is the caller's job (CI loop-mounts esp.img before
-# dpkg -i; on the device fstab mounts PARTLABEL=esp there).
+# + DTB in /boot, no initramfs. postinst syncs both to the ESP and fails if
+# /boot/efi is not mounted — mounting it is the caller's job (CI loop-mounts
+# esp.img before dpkg -i; on the device fstab mounts PARTLABEL=esp there).
+# /boot/efi must be a vfat ESP labelled esp. extlinux.conf is written on first
+# installation, preserved on upgrades, and an upgrade without one fails before
+# the kernel and DTB are replaced.
 #
 # The kernel source is parameterised the same way as in build-marble-debs.yml:
 # see the env block below and the `*_src_*` inputs.

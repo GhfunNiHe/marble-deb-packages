@@ -33,8 +33,11 @@ Description: Linux kernel for Xiaomi Redmi Note 12 Turbo (marble)
  Built with LLVM/ThinLTO and ccache. Ships the uncompressed kernel Image
  (as vmlinuz-<ver>), the device tree, and the out-of-tree modules. No
  initramfs is generated (no-initramfs direct boot, the path verified by the
- original port); the postinst syncs vmlinuz + DTB to the ESP and rewrites
- /extlinux/extlinux.conf when /boot/efi is mounted.
+ original port); the postinst requires /boot/efi to be a vfat ESP
+ (PARTLABEL=esp or filesystem LABEL=ESP), then syncs vmlinuz + DTB. It creates
+ /extlinux/extlinux.conf only on first installation and preserves it on
+ upgrades; an upgrade with no boot entry fails before the kernel and DTB are
+ replaced.
  .
  Local deviations from the author's reference config: CONFIG_LTO_CLANG_THIN=y
  and CONFIG_NTSYNC=m.
