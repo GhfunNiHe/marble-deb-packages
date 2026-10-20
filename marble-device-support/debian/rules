@@ -107,3 +107,20 @@ override_dh_auto_install:
 	# fastboot when the slot retry counter drains.
 	install -Dm644 debian/qbootctl.service.d/wait-for-partitions.conf \
 		debian/marble-device-support/usr/lib/systemd/system/qbootctl.service.d/wait-for-partitions.conf
+	# Modem bring-up. qcom-phone-utils' qcom-modem-setup gives the SIM only one
+	# second before declaring the card missing; this modem's UIM needs about
+	# ten. The stock script therefore always lost the race, never activated the
+	# primary GW provisioning session, and ModemManager settled on
+	# failed/sim-missing - which also means no "unlock-required: sim-pin", i.e.
+	# no PIN prompt at all. The wrapper re-runs the stock script with a 30 s
+	# budget, and the timer restarts the stack once if it failed anyway.
+	install -Dm755 debian/modem-sim-wait.sh \
+		debian/marble-device-support/usr/libexec/marble-modem-setup
+	install -Dm644 debian/qcom-modem-setup.service.d/10-marble-sim-wait.conf \
+		debian/marble-device-support/usr/lib/systemd/system/qcom-modem-setup.service.d/10-marble-sim-wait.conf
+	install -Dm755 debian/modem-recover.sh \
+		debian/marble-device-support/usr/libexec/marble-modem-recover.sh
+	install -Dm644 debian/marble-modem-recover.service \
+		debian/marble-device-support/usr/lib/systemd/system/marble-modem-recover.service
+	install -Dm644 debian/marble-modem-recover.timer \
+		debian/marble-device-support/usr/lib/systemd/system/marble-modem-recover.timer

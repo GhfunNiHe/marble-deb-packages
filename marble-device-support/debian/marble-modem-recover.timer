@@ -1,0 +1,13 @@
+[Unit]
+Description=marble: check the modem once, shortly after boot
+
+[Timer]
+# 25 s is past the point where a healthy modem has reached locked/enabled and
+# a broken one has already failed, so the check does not race ModemManager's
+# own probing.
+OnBootSec=25s
+AccuracySec=5s
+Unit=marble-modem-recover.service
+
+[Install]
+WantedBy=timers.target

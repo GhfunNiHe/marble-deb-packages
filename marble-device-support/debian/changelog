@@ -1,3 +1,27 @@
+marble-device-support (1.0.0-16) unstable; urgency=medium
+
+  * Fix the modem coming up without a SIM: no PIN prompt, no registration, no
+    SMS until the stack was restarted by hand. qcom-phone-utils' script
+    /usr/bin/qcom-modem-setup hardcodes sim_wait_time=1 (the comment says it
+    can be raised to e.g. 30), while this modem's UIM takes about ten seconds
+    to report "Card state: 'present'". On every cold boot the script printed
+    "E: No sim detected after 1 seconds." and exited 4, leaving the primary GW
+    provisioning session inactive; ModemManager then logged "Couldn't check
+    unlock status: QMI operation failed: GW primary session index unknown" and
+    settled on state=failed (sim-missing). A failed modem never reports
+    unlock-required=sim-pin, so Phosh had nothing to prompt with.
+    - qcom-modem-setup.service.d/10-marble-sim-wait.conf points ExecStart at
+      marble-modem-setup, which re-runs the stock script (from /run) with
+      sim_wait_time=30.
+    - marble-modem-recover.timer fires 25 s after boot and, if the modem still
+      sits in failed/sim-missing, restarts qcom-modem-setup and ModemManager
+      once. It is deliberately not ordered into multi-user.target, so a slow
+      poll can never delay boot.
+  * Depend on qcom-phone-utils (the script being wrapped) and modemmanager
+    (mmcli, used by the recovery check).
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Wed, 21 Oct 2026 00:45:00 +0800
+
 marble-device-support (1.0.0-15) unstable; urgency=medium
 
   * Fix the boot-time race that left some boots without WLAN at all. The unit

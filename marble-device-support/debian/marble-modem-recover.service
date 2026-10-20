@@ -1,0 +1,11 @@
+[Unit]
+Description=marble: recover the modem when ModemManager gave up before the SIM was ready
+# The timer starts this 25 s after boot, by which point ModemManager has either
+# reached a usable state or settled on its failure. Keep it out of the boot
+# path (no WantedBy on a target): a slow poll must never delay multi-user.
+After=ModemManager.service
+Wants=ModemManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/marble-modem-recover.sh
