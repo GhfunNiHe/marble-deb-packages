@@ -13,6 +13,15 @@ Description=marble: restore the factory WLAN and Bluetooth MACs from persist
 # 00:00:00:00:00:00 and the kernel keeps it out of the management index list
 # until userspace pushes a public address. That has to happen after
 # bluetoothd, which is what powers the controller up (and back down) first.
+#
+# persist ordering: udev creates /dev/disk/by-partlabel/persist, and
+# local-fs.target says nothing about whether that has happened yet. When this
+# unit wins the race the mount fails, the unit dies, ath11k_pci is never
+# loaded (it is blacklisted so that the MAC file can be staged first) and the
+# phone boots with Bluetooth but no WLAN at all. Order after the udev device
+# unit, mirroring qbootctl's wait-for-partitions.conf.
+Wants=dev-disk-by\x2dpartlabel-persist.device
+After=dev-disk-by\x2dpartlabel-persist.device
 After=local-fs.target bluetooth.service
 Before=network.target NetworkManager.service
 

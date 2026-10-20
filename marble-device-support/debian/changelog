@@ -1,3 +1,26 @@
+marble-device-support (1.0.0-15) unstable; urgency=medium
+
+  * Fix the boot-time race that left some boots without WLAN at all. The unit
+    only ordered itself after local-fs.target, so on fast boots it reached the
+    mount before udev had created /dev/disk/by-partlabel/persist:
+    "mount: /run/marble-persist: fsconfig() failed: Can't lookup blockdev".
+    set -e then killed the script before modprobe ath11k_pci, and because that
+    module is blacklisted on purpose the driver never loaded: the phone came up
+    with Bluetooth (bootmac handles that separately) and no wl* interface,
+    i.e. no WiFi until reboot. Journal evidence: 13.2 s to connected on a good
+    boot, zero ath11k lines on the bad ones.
+    - Order the unit after dev-disk-by\x2dpartlabel-persist.device, mirroring
+      qbootctl's wait-for-partitions.conf.
+    - Resolve the partition with findfs PARTLABEL=persist (kernel property, no
+      udev symlink needed) and retry for 10 s, instead of mounting the udev
+      path directly.
+  * Never load ath11k_pci without the factory address: a missing wlan_mac.bin
+    now fails the unit instead of bringing the radio up with a random MAC.
+  * Always re-copy wlan_mac.bin into the firmware directory; a stale file left
+    on /lib/firmware from an earlier boot would otherwise outlive the fix.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Tue, 20 Oct 2026 22:50:00 +0800
+
 marble-device-support (1.0.0-13) unstable; urgency=medium
 
   * Require qbootctl and ship a drop-in that orders qbootctl.service after the

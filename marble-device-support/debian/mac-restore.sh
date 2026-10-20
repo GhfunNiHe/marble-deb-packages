@@ -37,23 +37,54 @@ if [ -f "$PERSIST_SRC" ]; then
 	src=$PERSIST_SRC
 else
 	mkdir -p "$MNT"
-	mountpoint -q "$MNT" || mount -o ro,nosuid,nodev /dev/disk/by-partlabel/persist "$MNT"
+	if ! mountpoint -q "$MNT"; then
+		# Do not rely on /dev/disk/by-partlabel/persist: that symlink is
+		# created by udev, and this unit runs early enough that it is
+		# sometimes still missing. Mounting that path then fails with
+		# "Can't lookup blockdev", the unit dies, ath11k_pci is never
+		# modprobe'd (it is blacklisted on purpose) and the device boots
+		# with no WLAN at all - only Bluetooth comes up, because bootmac
+		# handles that one separately.
+		#
+		# findfs asks the kernel for the partition by its PARTLABEL
+		# property, so it works before udev has published any symlink.
+		# The retry covers the window where the UFS block device itself
+		# has not been probed yet.
+		persist_dev=$(findfs PARTLABEL=persist 2>/dev/null || true)
+		i=0
+		while [ -z "$persist_dev" ] && [ $i -lt 20 ]; do
+			sleep 0.5
+			persist_dev=$(findfs PARTLABEL=persist 2>/dev/null || true)
+			i=$((i + 1))
+		done
+		if [ -z "$persist_dev" ]; then
+			echo "persist partition never appeared; WLAN MAC cannot be restored" >&2
+			exit 1
+		fi
+		mount -o ro,nosuid,nodev "$persist_dev" "$MNT"
+	fi
 	src="$MNT/qca6490/wlan_mac.bin"
 fi
 
 if [ ! -f "$src" ]; then
-	echo "no wlan_mac.bin under persist; leaving both radios with their default MAC"
+	# Deliberately no modprobe here: loading ath11k_pci without the factory
+	# address makes the driver fall back to a random MAC, which silently
+	# breaks MAC-bound DHCP reservations and AP allowlists. Better to leave
+	# WLAN down and let the failure be visible.
+	echo "no wlan_mac.bin under persist; leaving WLAN down instead of using a random MAC" >&2
 	if [ "$src" != "$PERSIST_SRC" ]; then
 		umount "$MNT" 2>/dev/null || true
 		rmdir "$MNT" 2>/dev/null || true
 	fi
-	modprobe ath11k_pci
-	exit 0
+	exit 1
 fi
 
 wlan=$(sed -n 's/^wlan0=//p' "$src" | tr -d '\r\n' | tail -c 12)
 
-[ -f "$DST" ] || install -Dm644 "$src" "$DST"
+# Copy unconditionally: /lib/firmware persists across boots, so a file left
+# behind by an earlier boot (or by a build that shipped a placeholder) would
+# otherwise keep the wrong address forever.
+install -Dm644 "$src" "$DST"
 
 if [ "$src" != "$PERSIST_SRC" ]; then
 	umount "$MNT" 2>/dev/null || true
