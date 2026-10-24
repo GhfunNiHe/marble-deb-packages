@@ -124,3 +124,8 @@ override_dh_auto_install:
 		debian/marble-device-support/usr/lib/systemd/system/marble-modem-recover.service
 	install -Dm644 debian/marble-modem-recover.timer \
 		debian/marble-device-support/usr/lib/systemd/system/marble-modem-recover.timer
+
+# Put back the 0600 that dh_fixperms strips; why it matters is in 1.0.0-17.
+override_dh_fixperms:
+	dh_fixperms
+	chmod 600 debian/marble-device-support/usr/lib/NetworkManager/system-connections/ct-data.nmconnection

@@ -1,3 +1,18 @@
+marble-device-support (1.0.0-17) unstable; urgency=medium
+
+  * Ship the cellular APN profile with the permissions NetworkManager
+    actually accepts. ct-data.nmconnection was installed with `install -m 600`
+    but dh_fixperms normalises every non-executable file in the package tree to
+    0644 afterwards, so the shipped file was world-readable. NetworkManager
+    does not warn about that: it silently skips any keyfile that is group or
+    world readable, so `nmcli con show` never listed ct-data and a freshly
+    flashed image had no cellular data at all - the only working connection was
+    whatever the user added by hand. Verified against NetworkManager 1.58.1:
+    the identical file is listed at 0600 and invisible at 0644. Reinstate 0600
+    in an override_dh_fixperms so the mode survives the package build.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Sat, 24 Oct 2026 13:00:00 +0800
+
 marble-device-support (1.0.0-16) unstable; urgency=medium
 
   * Fix the modem coming up without a SIM: no PIN prompt, no registration, no
