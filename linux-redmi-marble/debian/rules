@@ -42,11 +42,40 @@ override_dh_auto_configure:
 # tree arrives as a fresh tarball anyway, so there is nothing to clean.
 override_dh_auto_clean:
 
+# The kernel tree has a `test` target that dh_auto_test finds and runs, and it
+# is not a test suite: it is `make syncconfig`, which re-runs kconfig's
+# scripts/kconfig/conf on the real .config. Interactively that process blocks
+# forever reading /dev/pts (its stdin), and the whole build hangs after Image
+# is already built; with stdin at /dev/null it returns immediately but has
+# still touched .config behind the build's back. There is nothing to test in a
+# kernel package, so skip it outright.
+override_dh_auto_test:
+
 override_dh_auto_build:
-	# Resolve the upstream main HEAD to a short hash for a traceable
-	# LOCALVERSION (same scheme as the sheng RPM spec). Falls back to
-	# "unknown" when offline.
-	COMMIT_HASH=$$(git ls-remote https://github.com/iLtanaka/linux-marble.git refs/heads/main 2>/dev/null | cut -c1-7); \
+	# Resolve a short hash for a traceable LOCALVERSION (same scheme as the
+	# sheng RPM spec), in order of trust:
+	#   1. KERNEL_COMMIT_HASH - an explicit pin from the caller;
+	#   2. the built tree's own git HEAD - the only source that describes
+	#      what is actually being compiled (a local checkout, or a build
+	#      started from one). Note a newer upstream commit must NOT win here:
+	#      it would print a hash the tree does not contain;
+	#   3. github, with retries - CI builds from a tarball with no .git, and
+	#      a single-shot git ls-remote drops out often enough under load that
+	#      the silent "unknown" fallback renames the release string, and with
+	#      it every module path, behind the builder's back.
+	COMMIT_HASH="$${KERNEL_COMMIT_HASH:-}"; \
+		if [ -z "$$COMMIT_HASH" ] && [ -d .git ]; then \
+			COMMIT_HASH=$$(git rev-parse --short=7 HEAD 2>/dev/null); \
+		fi; \
+		if [ -z "$$COMMIT_HASH" ]; then \
+			for attempt in 1 2 3 4; do \
+				COMMIT_HASH=$$(timeout 20 git ls-remote \
+					https://github.com/iLtanaka/linux-marble.git \
+					refs/heads/main 2>/dev/null | cut -c1-7); \
+				[ -n "$$COMMIT_HASH" ] && break; \
+				sleep 2; \
+			done; \
+		fi; \
 		[ -n "$$COMMIT_HASH" ] || COMMIT_HASH=unknown; \
 		LOCALVERSION_FULL="-$(SOC)-g$$COMMIT_HASH"; \
 		echo "$$LOCALVERSION_FULL" > .lkv_suffix; \

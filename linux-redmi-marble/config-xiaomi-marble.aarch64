@@ -5,6 +5,10 @@
 #   CONFIG_NTSYNC=m            /dev/ntsync for Wine/Proton, zero cost unused
 #   CONFIG_LOCALVERSION_AUTO=n release string is 7.2.8-sm8475-g<commit7>, the
 #                              -sm8475-g<hash> part comes from debian/rules
+#   CONFIG_DMABUF_HEAPS{,_SYSTEM}=y
+#                              /dev/dma_heap/system; the Iris VA-API backend
+#                              takes its Import scratch buffer from here and
+#                              nothing else provides it (see the changelog)
 # The reference config is otherwise verbatim; see the repository AGENTS.md.
 #
 #
@@ -8230,7 +8234,8 @@ CONFIG_SYNC_FILE=y
 # CONFIG_SW_SYNC is not set
 CONFIG_UDMABUF=y
 # CONFIG_DMABUF_DEBUG is not set
-# CONFIG_DMABUF_HEAPS is not set
+CONFIG_DMABUF_HEAPS=y
+CONFIG_DMABUF_HEAPS_SYSTEM=y
 # end of DMABUF options
 
 # CONFIG_UIO is not set

@@ -1,3 +1,42 @@
+linux-redmi-marble (7.2.8+marble12) unstable; urgency=medium
+
+  * Expose the HEVC/H.264 deblocking filter controls the HFI gen2 encoder
+    needs (iris-deblocking-filter-controls.patch, from FFT-infra/
+    qualcomm-iris-vaapi packaging/kernel/0002). Without them a VA-API client
+    cannot set the loop filter mode or its alpha/beta (H.264) and tc/beta
+    (HEVC) offsets: iris only registered the entropy and bitrate caps for
+    encoder sessions, so vaCreateConfig() for VAEntrypointEncSlice either
+    failed or silently used firmware defaults. The controls are registered in
+    inst_fw_cap_sm8550_enc, reject changes once OUTPUT is streaming, and are
+    packed into HFI_PROP_DEBLOCKING_MODE biased by six.
+  * Keep the timestamps of error buffers (iris-preserve-timestamps-on-error-
+    buffers.patch, same source, 0004). An encoder that returns a
+    CORRUPT/ERROR buffer with a zeroed timestamp breaks the client's
+    frame-to-packet mapping on the first dropped frame.
+  * Note for whoever refreshes debian/patches: iris-decode-order-output and
+    ath11k-load-wlan-mac-from-firmware no longer patch the 7.2.8 tree - iLtanaka
+    merged both upstream. debian/rules already reverse-tests each patch and
+    prints "already applied", so they stay for older base commits at no cost.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Sat, 24 Oct 2026 14:05:00 +0800
+
+linux-redmi-marble (7.2.8+marble11) unstable; urgency=medium
+
+  * Enable CONFIG_DMABUF_HEAPS + CONFIG_DMABUF_HEAPS_SYSTEM (/dev/dma_heap/
+    system). The new Iris VA-API backend uses the system heap for the
+    driver-owned scratch buffer an Import CAPTURE pool lends the firmware
+    during a STOP/LAST drain, and as the last-resort fallback in
+    allocate_stable(). Import is the publish policy this device takes for
+    H.264/HEVC whenever the decode-order controls are present, so without the
+    heap the zero-copy path fails with "allocate scratch CAPTURE buffer" on
+    the first seek or EOS - playback ends in a decode error instead of a
+    clean EOS. The MSM GEM path allocate_stable() tries first is unaffected;
+    this only fills in what had no other source.
+  * Ship together with libva-v4l2 1.0.0-3: the previous backend never touched
+    /dev/dma_heap, so the pairing matters, not the individual packages.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 22 Oct 2026 19:10:00 +0800
+
 linux-redmi-marble (7.2.8+marble10) unstable; urgency=medium
 
   * postinst: identify the ESP as vfat with either PARTLABEL=esp or filesystem

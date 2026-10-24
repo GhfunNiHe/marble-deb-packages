@@ -1,2 +1,4 @@
 ath11k-load-wlan-mac-from-firmware.patch
 iris-decode-order-output.patch
+iris-deblocking-filter-controls.patch
+iris-preserve-timestamps-on-error-buffers.patch
