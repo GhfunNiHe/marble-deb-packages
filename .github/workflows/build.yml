@@ -36,8 +36,8 @@ env:
   SRC_LIBSSC_REF: ${{ inputs.libssc_src_ref }}              # empty = v<changelog version>
   SRC_IIO_REPO: ${{ inputs.iio_src_repo || 'https://gitlab.freedesktop.org/hadess/iio-sensor-proxy' }}
   SRC_IIO_REF: ${{ inputs.iio_src_ref }}                    # empty = <changelog version>
-  SRC_LIBVA_REPO: ${{ inputs.libva_src_repo || 'https://github.com/radxa-pkg/libva-v4l2' }}
-  SRC_LIBVA_REF: ${{ inputs.libva_src_ref }}                # empty = libva-v4l2/COMMIT
+  SRC_LIBVA_REPO: ${{ inputs.libva_src_repo || 'https://github.com/FFT-infra/qualcomm-iris-vaapi' }}
+  SRC_LIBVA_REF: ${{ inputs.libva_src_ref }}                # default main
   SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/iLtanaka/linux-marble' }}
   SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}              # empty = main
 
@@ -65,57 +65,57 @@ on:
         type: string
         default: 'https://github.com/iLtanaka/firmware-xiaomi-marble'
       firmware_src_ref:
-        description: 'firmware-redmi-marble 的 tag/分支/提交'
+        description: 'firmware-redmi-marble 的 tag/分支/提交（留空 = v<debian/changelog 版本>）'
         type: string
-        default: 'v20261008'
+        default: ''
       libqmi_src_repo:
         description: 'libqmi 源码仓库地址 (repo URL)'
         type: string
         default: 'https://gitlab.freedesktop.org/mobile-broadband/libqmi'
       libqmi_src_ref:
-        description: 'libqmi 的 tag/分支/提交'
+        description: 'libqmi 的 tag/分支/提交（留空 = libqmi/COMMIT）'
         type: string
-        default: 'd9e8af5cae7fdf9749baf87606568d3af4d03082'
+        default: ''
       devsupport_src_repo:
         description: 'marble-device-support 源码仓库地址 (repo URL)'
         type: string
         default: 'https://github.com/iLtanaka/marble-device-support'
       devsupport_src_ref:
-        description: 'marble-device-support 的分支/tag'
+        description: 'marble-device-support 的分支/tag（留空 = 上游默认分支）'
         type: string
-        default: 'main'
+        default: ''
       modemmanager_src_repo:
         description: 'ModemManager 源码仓库地址 (repo URL)'
         type: string
         default: 'https://gitlab.freedesktop.org/mobile-broadband/ModemManager'
       modemmanager_src_ref:
-        description: 'ModemManager 的 tag/分支/提交'
+        description: 'ModemManager 的 tag/分支/提交（留空 = modemmanager/COMMIT）'
         type: string
-        default: '98777e693fcda3ea89151f76f3b2033532a8ef7f'
+        default: ''
       libssc_src_repo:
         description: 'libssc 源码仓库地址 (repo URL)'
         type: string
         default: 'https://codeberg.org/DylanVanAssche/libssc'
       libssc_src_ref:
-        description: 'libssc 的 tag/分支/提交'
+        description: 'libssc 的 tag/分支/提交（留空 = v<debian/changelog 版本>）'
         type: string
-        default: 'v0.4.4'
+        default: ''
       iio_src_repo:
         description: 'iio-sensor-proxy 源码仓库地址 (repo URL)'
         type: string
         default: 'https://gitlab.freedesktop.org/hadess/iio-sensor-proxy'
       iio_src_ref:
-        description: 'iio-sensor-proxy 的 tag/分支/提交'
+        description: 'iio-sensor-proxy 的 tag/分支/提交（留空 = <debian/changelog 版本>）'
         type: string
-        default: '3.9'
+        default: ''
       libva_src_repo:
         description: 'libva-v4l2 源码仓库地址 (repo URL)'
         type: string
-        default: 'https://github.com/radxa-pkg/libva-v4l2'
+        default: 'https://github.com/FFT-infra/qualcomm-iris-vaapi'
       libva_src_ref:
         description: 'libva-v4l2 的 tag/分支/提交'
         type: string
-        default: '0e4ce1e05da1d0a92b342efc2090b9e4987035e1'
+        default: 'main'
       kernel_src_repo:
         description: 'linux-marble 内核源码仓库地址 (repo URL)'
         type: string
@@ -177,12 +177,31 @@ jobs:
       - name: Setup work dirs
         run: |
           mkdir -p "$RUNNER_TEMP/build" "$GITHUB_WORKSPACE/out"
-          # One ccache directory for every compile in the job. Without this the
-          # meson packages (which pick ccache up on their own) would write to
-          # ccache's default ~/.cache/ccache and the kernel rules to
-          # ~/.ccache — two caches, and only the second one is cached below.
+          # One ccache directory for every compile in the job: $HOME/.ccache,
+          # which is also what linux-redmi-marble/debian/rules defaults to
+          # (${CCACHE_DIR:-$HOME/.ccache}) and what is cached below.
           mkdir -p "$HOME/.ccache"
           echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
+
+          # ccache has to be put in front of the compiler by hand. meson does
+          # NOT pick it up on its own any more: it only honours an explicit
+          # `CC="ccache gcc"` in the environment or a native file, and the
+          # `detect_compiler_cache()` helper in mesonbuild/envconfig.py is no
+          # longer called. Without this line the four meson packages
+          # (libssc, iio-sensor-proxy-ssc, libva-v4l2, modemmanager) compile
+          # straight through gcc/g++ and only the kernel, whose rules spell
+          # out CC="ccache clang", ever touches the cache.
+          #
+          # /usr/lib/ccache is the shim directory Debian's ccache package
+          # ships (symlinks named cc, gcc, c++, g++, clang, clang++, ...).
+          # Prepending it wraps every compiler every package invokes, without
+          # overriding the CC/CXX a package sets for itself.
+          if [ -d /usr/lib/ccache ]; then
+            echo "PATH=/usr/lib/ccache:$PATH" >> "$GITHUB_ENV"
+            ls /usr/lib/ccache
+          else
+            echo "::warning::/usr/lib/ccache is missing; the meson packages will compile uncached"
+          fi
 
       # ================================================================
       # ccache: one pool for every C/C++ compile in this repo — all packages
@@ -239,7 +258,7 @@ jobs:
             echo "SRC_MODEMMANAGER_URL=$(src_url "$SRC_MODEMMANAGER_REPO" "${SRC_MODEMMANAGER_REF:-$(cat modemmanager/COMMIT)}")"
             echo "SRC_LIBSSC_URL=$(src_url "$SRC_LIBSSC_REPO" "${SRC_LIBSSC_REF:-v$LSVER}")"
             echo "SRC_IIO_URL=$(src_url "$SRC_IIO_REPO" "${SRC_IIO_REF:-$IIOVER}")"
-            echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-$(cat libva-v4l2/COMMIT)}")"
+            echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-main}")"
             echo "SRC_KERNEL_URL=$(src_url "$SRC_KERNEL_REPO" "${SRC_KERNEL_REF:-main}")"
           } >> "$GITHUB_ENV"
 
@@ -385,15 +404,21 @@ jobs:
       # libva-v4l2: the VA-API backend for the Iris stateful V4L2 M2M
       # decoder. Debian only ships Intel and Mesa VA drivers, so browsers
       # and every VA-API consumer have no way to reach the Qualcomm driver
-      # without this package. Pinned to the radxa fork: upstream
-      # mxsrc/libva-v4l2 is stateless-only, while Iris is stateful.
+      # without this package. Pinned to the FFT-infra fork: same
+      # mxsrc/libva-v4l2 ancestry as the radxa fork (and, at this commit,
+      # byte-identical to phxinyang/qualcomm-iris-vaapi, which it forks),
+      # but the stateful Iris backend is rewritten around three publish
+      # policies picked per surface from the client's export behaviour —
+      # Direct, Import (Chrome's zero-copy path) and Copy (GPU blit, which
+      # is also the fallback when the kernel lacks the decode-order
+      # controls, so the driver no longer refuses to start with
+      # "S_CTRL DISPLAY_DELAY ... Invalid argument").
       #
-      # It pairs with the iris decode-order patch in
-      # linux-redmi-marble/debian/patches (the backend refuses to start
-      # without those controls: "S_CTRL DISPLAY_DELAY ... Invalid
-      # argument"), and installs v4l2_drv_video.so plus the
-      # msm_drv_video.so alias libva probes for Qualcomm parts, so plain
-      # vaInitialize() finds it with no environment variables.
+      # It still pairs with the iris decode-order patch in
+      # linux-redmi-marble/debian/patches, but degrades gracefully without
+      # it. The msm_drv_video.so alias libva probes for Qualcomm parts is
+      # created by debian/rules, because this upstream's meson.build only
+      # installs v4l2_drv_video.so (the radxa one did install_symlink()).
       # ================================================================
       - name: "Build: libva-v4l2"
         run: |
@@ -602,6 +627,13 @@ jobs:
             || { echo "FAIL: the msm_drv_video.so alias is missing or points elsewhere"; exit 1; }
           echo "$LIST" | grep -qE 'environment\.d/60-libva-v4l2\.conf$' \
             || { echo "FAIL: GStreamer VA environment config is missing"; exit 1; }
+          # The launcher resolves the decoder node by driver name at runtime
+          # (no /dev/videoN literal anywhere), so it is part of the contract,
+          # not a convenience. Both files are installed by upstream meson.
+          echo "$LIST" | grep -qE 'bin/iris-vaapi-browser$' \
+            || { echo "FAIL: the iris-vaapi-browser launcher is missing"; exit 1; }
+          echo "$LIST" | grep -qE 'applications/google-chrome-iris-v4l2\.desktop$' \
+            || { echo "FAIL: the Chrome desktop entry is missing"; exit 1; }
           echo "libva-v4l2 deb verified: $DEB"
 
       - name: Upload DEBs
@@ -611,6 +643,18 @@ jobs:
           path: out/**/*.deb
           retention-days: 14
           if-no-files-found: error
+
+      # Hit-rate evidence for every package built above, not just the kernel
+      # (its step prints its own stats inline). meson wraps the compiler with
+      # ccache on its own when `ccache` is on PATH and CC/CXX are unset — so
+      # "Cacheable calls: 0" here means the wrapper never engaged and the
+      # restore/save below is buying nothing. Worth knowing before blaming a
+      # slow job on the cache.
+      - name: ccache stats
+        if: always()
+        run: |
+          echo "CCACHE_DIR=${CCACHE_DIR:-unset}  CCACHE_MAXSIZE=${CCACHE_MAXSIZE:-unset}"
+          ccache --show-stats -v || true
 
       # Whatever the job compiled stays cached even when a build or a verify
       # assertion above failed (see the note on the restore step). The key is
