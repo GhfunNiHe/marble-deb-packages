@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: libva-v4l2
-Source: https://github.com/strongtz/libva-v4l2
+Source: https://github.com/FFT-infra/qualcomm-iris-vaapi
 
 Files: *
 Copyright: 2026 libva-v4l2 contributors
@@ -23,9 +23,40 @@ License: MIT
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
 
-Files: patches/*
-Copyright: 2026 Xilin Wu <sophon@radxa.com>
+Files: include/linux/*
+Copyright: 1999-2012 the V4L2 contributors
+           2012-2026 the Linux kernel contributors
+License: GPL-2.0+ with Linux-syscall-note or BSD-3-Clause
+ These are the vendored kernel UAPI headers; every file carries its own
+ SPDX-License-Identifier tag, which is what governs it:
+ .
+ SPDX-License-Identifier: ((GPL-2.0+ WITH Linux-syscall-note) OR BSD-3-Clause)
+ .
+ On Debian systems the full text of the GNU General Public License version 2
+ can be found in /usr/share/common-licenses/GPL-2, and of the GNU Lesser
+ General Public License version 2.1 in /usr/share/common-licenses/LGPL-2.1.
+ The BSD-3-Clause text is the standard one; the Linux-syscall-note permits
+ linking these headers with code under any license.
+
+Files: packaging/kernel/*
+Copyright: 2026 phxinyang <phxinyang@users.noreply.github.com>
+           2026 Xilin Wu <sophon@radxa.com>
            Linux kernel contributors
 License: GPL-2.0-only
+ The two Iris patches carried here rework GPL-2.0 kernel code
+ (drivers/media/platform/qcom/iris/), so they are GPL-2.0 even though the
+ driver itself is not. They originate from strongtz/libva-v4l2 (Radxa,
+ Xilin Wu) and travel rebased.
+ .
  On Debian systems the full text of the GNU General Public License version 2
  can be found in /usr/share/common-licenses/GPL-2.
+
+Files: COPYING.LGPL
+Copyright: 1991-1999 Free Software Foundation, Inc.
+License: LGPL-2.1
+ The project as a whole is released under the GNU Lesser General Public
+ License version 2.1 as well as under the MIT license above; the upstream
+ COPYING file names both licenses (COPYING.MIT, COPYING.LGPL).
+ .
+ On Debian systems the complete text of the GNU Lesser General Public
+ License version 2.1 can be found in /usr/share/common-licenses/LGPL-2.1.

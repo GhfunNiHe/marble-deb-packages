@@ -1,2 +1,2 @@
-packaging/environment/60-libva-v4l2.conf usr/lib/environment.d
-packaging/environment/libva-v4l2.sh etc/profile.d
+debian/env/60-libva-v4l2.conf usr/lib/environment.d
+debian/env/libva-v4l2.sh etc/profile.d

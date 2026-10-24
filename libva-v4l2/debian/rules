@@ -6,8 +6,23 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 	dh $@ --buildsystem=meson
 
 override_dh_auto_configure:
-	dh_auto_configure -- -Dfastcv=disabled
+	dh_auto_configure
 
 override_dh_auto_install:
 	dh_auto_install
-	rm -rf debian/libva-v4l2/usr/share/licenses
+	# The new upstream's meson_options.txt only knows kernel_headers, so the
+	# radxa fork's -Dfastcv=disabled is gone. And its meson.build no longer
+	# installs msm_drv_video.so (the radxa one did, via install_symlink()),
+	# only v4l2_drv_video.so. libva probes msm_drv_video.so by DRM name on
+	# MSM, so without the alias vaInitialize() finds no driver and every
+	# consumer silently falls back to software decode.
+	set -e; found=0; \
+	for d in debian/libva-v4l2/usr/lib/*/dri debian/libva-v4l2/usr/lib64/dri; do \
+		[ -d "$$d" ] || continue; \
+		ln -sf v4l2_drv_video.so "$$d/msm_drv_video.so"; \
+		found=1; \
+	done; \
+	if [ "$$found" = 0 ]; then \
+		echo "libva-v4l2: no dri directory under /usr/lib — dh_auto_install installed nothing" >&2; \
+		exit 1; \
+	fi

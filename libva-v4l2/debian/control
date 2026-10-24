@@ -3,24 +3,32 @@ Section: video
 Priority: optional
 Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
 Build-Depends: debhelper-compat (= 13), meson (>= 0.61), ninja-build, pkg-config,
- libva-dev, libdrm-dev, libegl-dev, libgles-dev, libgbm-dev
+ libva-dev, libdrm-dev, libegl-dev, libgles-dev, libgbm-dev, python3
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
-Homepage: https://github.com/radxa-pkg/libva-v4l2
+Homepage: https://github.com/FFT-infra/qualcomm-iris-vaapi
 Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
 Vcs-Browser: https://github.com/GhfunNiHe/marble-deb-package
 
 Package: libva-v4l2
 Architecture: arm64
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, v4l-utils
 Provides: va-driver
 Description: VA-API backend for Qualcomm Iris stateful V4L2 devices
  Hardware video decoding through the Qualcomm Iris stateful V4L2 M2M
- interface, for SC8280XP (Radxa Dragon Q8B) and SM7475 (Xiaomi Poco F5 /
- Redmi Note 12 Turbo, marble). Requires a kernel whose Iris driver exposes
- the decoder display-delay controls (see the iris decode-order patch in
- linux-redmi-marble) and a matching firmware.
+ interface, for SM8550 and SM7475 (Xiaomi Poco F5 / Redmi Note 12 Turbo,
+ marble). Requires a kernel whose Iris driver exposes the decoder (see the
+ iris decode-order patch in linux-redmi-marble) and a matching firmware.
  .
- Includes the MSM driver alias and GStreamer VA environment configuration.
- FastCV video processing is disabled in distribution builds; H.264/HEVC
- encoding is untested on marble.
+ Decoded frames reach the client through one of three publish policies
+ chosen per surface: Direct (the completed CAPTURE slot itself is handed
+ over), Import (a buffer the client exported before its first decode is
+ queued into CAPTURE, which is the zero-copy path Chrome takes) and Copy
+ (GPU blit inside a stable buffer, used for VP9 and on stock kernels
+ without the decode-order controls). Nothing here selects the policy by
+ hand; the driver reads the client's export behaviour.
+ .
+ Includes the MSM driver alias, the GStreamer VA environment
+ configuration, and the iris-vaapi-browser launcher with a
+ "Google Chrome (Iris VA-API)" desktop entry. Decode only: the backend
+ exposes no VAEntrypointEncSlice, so no H.264/HEVC encoding is offered.
