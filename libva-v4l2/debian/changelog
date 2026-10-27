@@ -1,3 +1,20 @@
+libva-v4l2 (1.0.0-4) unstable; urgency=medium
+
+  * Track upstream's feat/encode-entrypoints branch: it adds the encode
+    path, VAEntrypointEncSlice for H.264 (CBR/VBR/CQP) and HEVC Main on the
+    encoder node the kernel exposes next to the decoder, so ffmpeg and
+    GStreamer can encode in hardware. libva_src_ref now defaults to this
+    branch instead of main.
+  * That branch installs no iris-vaapi-browser launcher and no
+    "Google Chrome (Iris VA-API)" desktop entry — libva resolves the driver
+    through the msm_drv_video.so alias, so clients need neither. It installs
+    iris-device-check.sh, iris-verify.sh, iris-configure-clients.sh and
+    share/iris-vaapi/iris-node.sh instead, and the CI verification now
+    asserts those files rather than main's launcher layout.
+  * Recommends: ffmpeg — iris-verify exits 2 without ffmpeg/ffprobe.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Tue, 27 Oct 2026 19:45:00 +0800
+
 libva-v4l2 (1.0.0-3) unstable; urgency=medium
 
   * Switch upstream to FFT-infra/qualcomm-iris-vaapi, tracking its main

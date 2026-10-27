@@ -37,7 +37,7 @@ env:
   SRC_IIO_REPO: ${{ inputs.iio_src_repo || 'https://gitlab.freedesktop.org/hadess/iio-sensor-proxy' }}
   SRC_IIO_REF: ${{ inputs.iio_src_ref }}                    # empty = <changelog version>
   SRC_LIBVA_REPO: ${{ inputs.libva_src_repo || 'https://github.com/FFT-infra/qualcomm-iris-vaapi' }}
-  SRC_LIBVA_REF: ${{ inputs.libva_src_ref }}                # default main
+  SRC_LIBVA_REF: ${{ inputs.libva_src_ref || 'feat/encode-entrypoints' }}  # empty = feat/encode-entrypoints
   SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/iLtanaka/linux-marble' }}
   SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}              # empty = main
 
@@ -115,7 +115,7 @@ on:
       libva_src_ref:
         description: 'libva-v4l2 的 tag/分支/提交'
         type: string
-        default: 'main'
+        default: 'feat/encode-entrypoints'
       kernel_src_repo:
         description: 'linux-marble 内核源码仓库地址 (repo URL)'
         type: string
@@ -258,7 +258,7 @@ jobs:
             echo "SRC_MODEMMANAGER_URL=$(src_url "$SRC_MODEMMANAGER_REPO" "${SRC_MODEMMANAGER_REF:-$(cat modemmanager/COMMIT)}")"
             echo "SRC_LIBSSC_URL=$(src_url "$SRC_LIBSSC_REPO" "${SRC_LIBSSC_REF:-v$LSVER}")"
             echo "SRC_IIO_URL=$(src_url "$SRC_IIO_REPO" "${SRC_IIO_REF:-$IIOVER}")"
-            echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-main}")"
+            echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-feat/encode-entrypoints}")"
             echo "SRC_KERNEL_URL=$(src_url "$SRC_KERNEL_REPO" "${SRC_KERNEL_REF:-main}")"
           } >> "$GITHUB_ENV"
 
@@ -627,13 +627,17 @@ jobs:
             || { echo "FAIL: the msm_drv_video.so alias is missing or points elsewhere"; exit 1; }
           echo "$LIST" | grep -qE 'environment\.d/60-libva-v4l2\.conf$' \
             || { echo "FAIL: GStreamer VA environment config is missing"; exit 1; }
-          # The launcher resolves the decoder node by driver name at runtime
-          # (no /dev/videoN literal anywhere), so it is part of the contract,
-          # not a convenience. Both files are installed by upstream meson.
-          echo "$LIST" | grep -qE 'bin/iris-vaapi-browser$' \
-            || { echo "FAIL: the iris-vaapi-browser launcher is missing"; exit 1; }
-          echo "$LIST" | grep -qE 'applications/google-chrome-iris-v4l2\.desktop$' \
-            || { echo "FAIL: the Chrome desktop entry is missing"; exit 1; }
+          # The tracked branch (feat/encode-entrypoints) installs no launcher
+          # and no desktop entry: libva resolves the driver through the
+          # msm_drv_video.so alias above, so clients need neither. What it
+          # does install is the diagnostic trio plus the node helper they
+          # share; assert on that layout, not on main's.
+          for f in 'bin/iris-device-check\.sh' 'bin/iris-verify\.sh' \
+                   'bin/iris-configure-clients\.sh' \
+                   'share/iris-vaapi/iris-node\.sh'; do
+            echo "$LIST" | grep -qE "$f$" \
+              || { echo "FAIL: upstream file $f is missing"; exit 1; }
+          done
           echo "libva-v4l2 deb verified: $DEB"
 
       - name: Upload DEBs

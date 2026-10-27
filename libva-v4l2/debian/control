@@ -13,6 +13,7 @@ Vcs-Browser: https://github.com/GhfunNiHe/marble-deb-package
 Package: libva-v4l2
 Architecture: arm64
 Depends: ${shlibs:Depends}, ${misc:Depends}, v4l-utils
+Recommends: ffmpeg
 Provides: va-driver
 Description: VA-API backend for Qualcomm Iris stateful V4L2 devices
  Hardware video decoding through the Qualcomm Iris stateful V4L2 M2M
@@ -28,7 +29,12 @@ Description: VA-API backend for Qualcomm Iris stateful V4L2 devices
  without the decode-order controls). Nothing here selects the policy by
  hand; the driver reads the client's export behaviour.
  .
- Includes the MSM driver alias, the GStreamer VA environment
- configuration, and the iris-vaapi-browser launcher with a
- "Google Chrome (Iris VA-API)" desktop entry. Decode only: the backend
- exposes no VAEntrypointEncSlice, so no H.264/HEVC encoding is offered.
+ Includes the MSM driver alias and the GStreamer VA environment
+ configuration. Also ships upstream's diagnostic commands
+ (iris-device-check, iris-verify, iris-configure-clients) and the node
+ helper they share; there is no launcher and no desktop entry, because
+ libva finds the driver through the msm_drv_video.so alias.
+ .
+ The backend also exposes VAEntrypointEncSlice for H.264 (CBR/VBR/CQP) and
+ HEVC Main on the encoder node the kernel exposes next to the decoder, so
+ ffmpeg and GStreamer can encode in hardware.
