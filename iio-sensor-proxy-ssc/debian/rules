@@ -19,3 +19,10 @@ override_dh_auto_configure:
 		-Dssc-support=enabled \
 		-Dsystemdsystemunitdir=/usr/lib/systemd/system \
 		-Dudevrulesdir=/usr/lib/udev/rules.d
+
+# Same delay as debian-sheng: hexagonrpcd needs a moment to load the DSP
+# firmware and its sensor registry before the proxy probes.
+override_dh_auto_install:
+	dh_auto_install
+	install -Dm644 debian/iio-sensor-proxy.service.d/10-marble-sensors.conf \
+		debian/iio-sensor-proxy-ssc/usr/lib/systemd/system/iio-sensor-proxy.service.d/10-marble-sensors.conf

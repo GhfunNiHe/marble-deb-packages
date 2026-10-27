@@ -1,3 +1,12 @@
+iio-sensor-proxy-ssc (3.9-2) unstable; urgency=medium
+
+  * Add a 10-marble-sensors drop-in ordering the proxy after hexagonrpcd and
+    sleeping 8 s in ExecStartPre, following debian-sheng's sensor delay: the
+    DSP daemon has to load its firmware and sensor registry first, otherwise
+    the proxy starts with no sensors (or 0 lux) and stays that way.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Tue, 27 Oct 2026 12:00:00 +0800
+
 iio-sensor-proxy-ssc (3.9-1) unstable; urgency=medium
 
   * Initial Debian packaging of iio-sensor-proxy 3.9 built with
