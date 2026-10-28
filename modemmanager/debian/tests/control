@@ -1,12 +1,12 @@
 Test-Command: mmcli --help
 Restrictions: superficial
 Depends:
- modemmanager,
+ modemmanager-marble,
 
 Test-Command: /usr/sbin/ModemManager --help
 Restrictions: superficial
 Depends:
- modemmanager,
+ modemmanager-marble,
 
 Test-Command: pkgconf --libs --cflags mm-glib
 Restrictions: superficial

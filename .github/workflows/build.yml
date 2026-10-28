@@ -355,7 +355,7 @@ jobs:
           # 'patch -p1' here.
           cp -a "$GITHUB_WORKSPACE/modemmanager/debian" debian
           DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -us -uc
-          cp "$RUNNER_TEMP/build"/modemmanager_*.deb "$RUNNER_TEMP/build"/libmm-glib0_*.deb \
+          cp "$RUNNER_TEMP/build"/modemmanager-marble_*.deb "$RUNNER_TEMP/build"/libmm-glib0_*.deb \
              "$RUNNER_TEMP/build"/libmm-glib-dev_*.deb "$RUNNER_TEMP/build"/gir1.2-modemmanager-*.deb \
              "$GITHUB_WORKSPACE/out/"
 

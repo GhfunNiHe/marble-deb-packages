@@ -37,8 +37,11 @@ Vcs-Git: https://salsa.debian.org/DebianOnMobile-team/modemmanager.git
 Vcs-Browser: https://salsa.debian.org/DebianOnMobile-team/modemmanager
 Homepage: https://www.freedesktop.org/wiki/Software/ModemManager/
 
-Package: modemmanager
+Package: modemmanager-marble
 Architecture: linux-any
+Provides: modemmanager (= ${binary:Version})
+Conflicts: modemmanager
+Replaces: modemmanager
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          polkitd,
@@ -93,7 +96,7 @@ Pre-Depends: ${misc:Pre-Depends},
 Multi-Arch: same
 Depends: ${shlibs:Depends},
          ${misc:Depends}
-Recommends: modemmanager (>= ${binary:Version})
+Recommends: modemmanager-marble (>= ${binary:Version})
 Description: D-Bus service for managing modems - shared libraries
  ModemManager is a DBus-activated daemon which controls mobile broadband
  (2G/3G/4G/5G) devices and connections. Whether built-in devices, USB dongles,
