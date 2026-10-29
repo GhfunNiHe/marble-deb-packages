@@ -76,6 +76,10 @@ override_dh_auto_install:
 	install -Dm644 debian/qcom-modem-setup.service.d/10-marble-sim-wait.conf \
 		debian/marble-device-support/usr/lib/systemd/system/qcom-modem-setup.service.d/10-marble-sim-wait.conf
 
+	# libcamera tuning for the IMX355: black level only, no CCM yet.
+	install -Dm644 debian/camera/imx355.yaml \
+		debian/marble-device-support/usr/share/libcamera/ipa/simple/imx355.yaml
+
 	install -Dm644 debian/marble-modem-recover.service \
 		debian/marble-device-support/usr/lib/systemd/system/marble-modem-recover.service
 	install -Dm644 debian/marble-modem-recover.timer \

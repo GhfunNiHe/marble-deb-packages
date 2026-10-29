@@ -1,3 +1,14 @@
+marble-device-support (1.0.0-23) unstable; urgency=medium
+
+  * Ship libcamera tuning at
+    /usr/share/libcamera/ipa/simple/imx355.yaml (black level only; libcamera
+    0.7.0 still lacks the IMX355 sensor helper).
+  * Camera status: only the rear lower sensor left of the flash works
+    (IMX355 on CSIPHY0). The rear top sensor, the one above the flash, and
+    the front camera are not supported yet.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 29 Oct 2026 21:10:00 +0800
+
 marble-device-support (1.0.0-22) unstable; urgency=medium
 
   * Drop After=hexagonrpcd.service from marble-sensors-watch. It created an
