@@ -1,0 +1,10 @@
+[Unit]
+Description=marble: re-arm the SSC sensor chain after an SLPI crash
+
+[Service]
+ExecStart=/usr/libexec/marble-helper sensors-watch
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

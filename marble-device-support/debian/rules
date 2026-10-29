@@ -42,8 +42,8 @@ override_dh_auto_install:
 		debian/marble-device-support/usr/lib/systemd/system/iio-sensor-proxy.service.d/70-marble-restart.conf
 	# Factory MACs for both radios from persist; the firmware copy pairs with
 	# the ath11k wlan_mac.bin patch in linux-redmi-marble.
-	install -Dm755 debian/mac-restore.sh \
-		debian/marble-device-support/usr/libexec/marble-mac-restore.sh
+	install -Dm755 debian/marble-helper \
+		debian/marble-device-support/usr/libexec/marble-helper
 	install -Dm644 debian/marble-mac-restore.service \
 		debian/marble-device-support/usr/lib/systemd/system/marble-mac-restore.service
 	# Mask bootmac (machine-id MAC): marble-mac-restore owns both addresses.
@@ -55,9 +55,10 @@ override_dh_auto_install:
 	# Accelerometer + proximity IIO tags for iio-sensor-proxy.
 	install -Dm644 debian/libssc-marble-sensors.rules \
 		debian/marble-device-support/usr/lib/udev/rules.d/82-libssc-marble-sensors.rules
-	# SLPI recovery re-arm; see the restart drop-in above.
-	install -Dm644 debian/marble-sensors-refresh.service \
-		debian/marble-device-support/usr/lib/systemd/system/marble-sensors-refresh.service
+	# SLPI crashes do not recreate /dev/fastrpc-sdsp, so udev cannot trigger
+	# this; watch the kernel log instead.
+	install -Dm644 debian/marble-sensors-watch.service \
+		debian/marble-device-support/usr/lib/systemd/system/marble-sensors-watch.service
 	# China Telecom fallback APN, read-only under /usr/lib (NM >= 1.36);
 	# autoconnect stays off until nmcli con up ct-data.
 	install -d debian/marble-device-support/usr/lib/NetworkManager/system-connections
@@ -65,7 +66,6 @@ override_dh_auto_install:
 		debian/marble-device-support/usr/lib/NetworkManager/system-connections/ct-data.nmconnection
 	# IMS/VoLTE helpers; requires 81voltd for the IMS PDN.
 	install -Dm755 marble-imsctl debian/marble-device-support/usr/libexec/marble-imsctl
-	install -Dm755 debian/marble-ims-enable.sh debian/marble-device-support/usr/libexec/marble-ims-enable.sh
 	install -Dm644 debian/marble-ims-enable.service \
 		debian/marble-device-support/usr/lib/systemd/system/marble-ims-enable.service
 	# Wait for boot_a/boot_b udev units before qbootctl marks the slot good.
@@ -73,12 +73,9 @@ override_dh_auto_install:
 		debian/marble-device-support/usr/lib/systemd/system/qbootctl.service.d/wait-for-partitions.conf
 	# qcom-modem-setup gives the SIM 1 s but this UIM needs ~10 s; the wrapper
 	# raises it to 30 s and the timer retries once.
-	install -Dm755 debian/modem-sim-wait.sh \
-		debian/marble-device-support/usr/libexec/marble-modem-setup
 	install -Dm644 debian/qcom-modem-setup.service.d/10-marble-sim-wait.conf \
 		debian/marble-device-support/usr/lib/systemd/system/qcom-modem-setup.service.d/10-marble-sim-wait.conf
-	install -Dm755 debian/modem-recover.sh \
-		debian/marble-device-support/usr/libexec/marble-modem-recover.sh
+
 	install -Dm644 debian/marble-modem-recover.service \
 		debian/marble-device-support/usr/lib/systemd/system/marble-modem-recover.service
 	install -Dm644 debian/marble-modem-recover.timer \

@@ -6,7 +6,7 @@ Wants=qrtr-ns.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/libexec/marble-ims-enable.sh
+ExecStart=/usr/libexec/marble-helper ims-enable
 RemainAfterExit=yes
 
 [Install]

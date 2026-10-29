@@ -1,0 +1,193 @@
+#!/bin/sh
+# marble: device-side oneshots and daemons; select one with $1.
+
+# Factory WLAN/BT MACs from persist: stage the file before ath11k_pci loads,
+# then push WLAN MAC - 1 to hci0 (the QCA NV has no BD_ADDR).
+mac_restore() {
+	set -eu
+	DST=/lib/firmware/ath11k/WCN6855/hw2.1/wlan_mac.bin
+	PERSIST_SRC=/persist/qca6490/wlan_mac.bin
+	MNT=/run/marble-persist
+	src=
+
+	if [ -f "$PERSIST_SRC" ]; then
+		src=$PERSIST_SRC
+	else
+		mkdir -p "$MNT"
+		if ! mountpoint -q "$MNT"; then
+			# PARTLABEL may not be in udev yet this early; retry while UFS probes.
+			persist_dev=$(findfs PARTLABEL=persist 2>/dev/null || true)
+			i=0
+			while [ -z "$persist_dev" ] && [ $i -lt 20 ]; do
+				sleep 0.5
+				persist_dev=$(findfs PARTLABEL=persist 2>/dev/null || true)
+				i=$((i + 1))
+			done
+			if [ -z "$persist_dev" ]; then
+				echo "persist partition never appeared; WLAN MAC cannot be restored" >&2
+				exit 1
+			fi
+			mount -o ro,nosuid,nodev "$persist_dev" "$MNT"
+		fi
+		src="$MNT/qca6490/wlan_mac.bin"
+	fi
+
+	if [ ! -f "$src" ]; then
+		# No factory file: leave WLAN down rather than using a random MAC.
+		echo "no wlan_mac.bin under persist; leaving WLAN down instead of using a random MAC" >&2
+		if [ "$src" != "$PERSIST_SRC" ]; then
+			umount "$MNT" 2>/dev/null || true
+			rmdir "$MNT" 2>/dev/null || true
+		fi
+		exit 1
+	fi
+
+	wlan=$(sed -n 's/^wlan0=//p' "$src" | tr -d '\r\n' | tail -c 12)
+
+	# Copy unconditionally: a stale file would pin the wrong address forever.
+	install -Dm644 "$src" "$DST"
+
+	if [ "$src" != "$PERSIST_SRC" ]; then
+		umount "$MNT" 2>/dev/null || true
+		rmdir "$MNT" 2>/dev/null || true
+	fi
+
+	modprobe ath11k_pci
+
+	case $wlan in
+		'' | *[!0-9A-Fa-f]*)
+			echo "cannot parse a WLAN MAC out of persist; leaving Bluetooth unconfigured"
+			exit 0
+			;;
+	esac
+	if [ ${#wlan} -ne 12 ]; then
+		echo "WLAN MAC '$wlan' is not 12 hex digits; leaving Bluetooth unconfigured"
+		exit 0
+	fi
+
+	wlan=$(echo "$wlan" | tr 'a-f' 'A-F')
+	last=$((0x${wlan#??????????} - 1))
+	[ $last -ge 0 ] || last=255
+	addr=$(printf '%s%02X' "${wlan%??}" $last | sed 's/../&:/g;s/:$//')
+
+	i=0
+	while [ ! -d /sys/class/bluetooth/hci0 ] && [ $i -lt 30 ]; do
+		sleep 1
+		i=$((i + 1))
+	done
+	if [ ! -d /sys/class/bluetooth/hci0 ]; then
+		echo "no hci0 after ${i}s; leaving Bluetooth unconfigured"
+		exit 0
+	fi
+
+	# Power down to reprogram, then restart bluetoothd to re-enumerate.
+	i=0
+	while [ $i -lt 5 ]; do
+		btmgmt --index 0 power off >/dev/null 2>&1 || true
+		if btmgmt --index 0 public-addr "$addr" >/dev/null 2>&1; then
+			echo "hci0 public address set to $addr"
+			btmgmt --index 0 power on >/dev/null 2>&1 || true
+			systemctl --no-block restart bluetooth.service </dev/null >/dev/null 2>&1 || true
+			exit 0
+		fi
+		sleep 2
+		i=$((i + 1))
+	done
+
+	echo "could not set the hci0 public address to $addr"
+	exit 0
+}
+
+# SLPI crashes without recreating /dev/fastrpc-sdsp; the udev trigger misses it.
+sensors_watch() {
+	dmesg -W | while read -r line; do
+		case $line in
+			*"crash detected in slpi"*)
+				sleep 3
+				systemctl --no-block try-restart hexagonrpcd.service
+				;;
+		esac
+	done
+}
+
+# ModemManager never retries a modem stuck in failed/sim-missing.
+modem_recover() {
+	set -u
+	modem_field() {
+		mmcli -m any --output-keyvalue 2>/dev/null |
+			sed -n "s/^modem\.generic\.$1 *: //p" | head -n1
+	}
+	log() { logger -t marble-modem-recover "$*"; }
+
+	i=0
+	while [ "$i" -lt 10 ]; do
+		i=$((i + 1))
+		state=$(modem_field state)
+		case "$state" in
+		registered | enabled | locked | connecting | connected | initializing | enabling)
+			log "modem state '$state', nothing to do"
+			exit 0
+			;;
+		failed)
+			reason=$(modem_field state-failed-reason)
+			if [ "$reason" = "sim-missing" ]; then
+				log "modem stuck in failed/sim-missing, restarting qcom-modem-setup + ModemManager"
+				systemctl restart qcom-modem-setup.service || true
+				systemctl restart ModemManager.service || true
+			else
+				log "modem failed with reason '$reason', leaving it alone"
+			fi
+			exit 0
+			;;
+		esac
+		sleep 3
+	done
+
+	log "no usable modem state after $i polls, giving up"
+}
+
+# Re-run qcom-modem-setup with sim_wait_time=30 (this UIM needs ~10 s).
+modem_sim_wait() {
+	set -eu
+	src=/usr/bin/qcom-modem-setup
+	dst=/run/marble-qcom-modem-setup.sh
+
+	sed 's/^sim_wait_time=1$/sim_wait_time=30/' "$src" >"$dst"
+	chmod 700 "$dst"
+
+	if ! grep -q '^sim_wait_time=30$' "$dst"; then
+		echo "W: sim_wait_time not found in $src, running it unmodified" >&2
+	fi
+
+	exec /bin/sh "$dst"
+}
+
+# The modem enables IMS only after the AP pushes the IMSS setting.
+ims_enable() {
+	set -eu
+	CTL=/usr/libexec/marble-imsctl
+
+	i=0
+	while [ "$i" -lt 90 ]; do
+		if qrtr-lookup 2>/dev/null | grep -q 'IMS application service'; then
+			break
+		fi
+		i=$((i + 1))
+		sleep 2
+	done
+
+	# Idempotent: the modem stores it in NV.
+	exec "$CTL" apply
+}
+
+case ${1:-} in
+	mac-restore) mac_restore ;;
+	sensors-watch) sensors_watch ;;
+	modem-recover) modem_recover ;;
+	modem-sim-wait) modem_sim_wait ;;
+	ims-enable) ims_enable ;;
+	*)
+		echo "usage: $0 {mac-restore|sensors-watch|modem-recover|modem-sim-wait|ims-enable}" >&2
+		exit 2
+		;;
+esac

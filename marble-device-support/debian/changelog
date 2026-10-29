@@ -1,3 +1,43 @@
+marble-device-support (1.0.0-22) unstable; urgency=medium
+
+  * Drop After=hexagonrpcd.service from marble-sensors-watch. It created an
+    ordering cycle on the first boot after installing 1.0.0-21
+    (multi-user.target/stop -> hexagonrpcd/stop -> watch/stop) and systemd
+    stopped the watchdog two seconds after starting it. The unit only reads
+    the kernel log and needs no ordering against hexagonrpcd.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 29 Oct 2026 14:40:00 +0800
+
+marble-device-support (1.0.0-21) unstable; urgency=medium
+
+  * Drop the udev-triggered marble-sensors-refresh.service. On 2026-10-29 the
+    SLPI crashed at 92 s and /dev/fastrpc-sdsp was never recreated, so its
+    SYSTEMD_WANTS event did not fire (and at boot try-restart is a no-op).
+    marble-sensors-watch.service now covers every crash.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 29 Oct 2026 14:10:00 +0800
+
+marble-device-support (1.0.0-20) unstable; urgency=medium
+
+  * Fold the five device scripts into one /usr/libexec/marble-helper with
+    mac-restore, sensors-watch, modem-recover, modem-sim-wait and ims-enable
+    subcommands. Units keep their own triggers and Restart= policies; only the
+    install list and the duplicated boilerplate shrink.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 29 Oct 2026 13:50:00 +0800
+
+marble-device-support (1.0.0-19) unstable; urgency=medium
+
+  * Restart hexagonrpcd from the SLPI crash message in the kernel log. The
+    udev trigger only fires when /dev/fastrpc-sdsp is recreated, which did
+    not happen on 2026-10-29: after the 92 s crash the daemon kept the dead
+    FastRPC session (unit active, NRestarts=0, ALS intensity [0,0,0] while
+    proximity/accelerometer still worked). A manual restart brought the ALS
+    back to 685 lux, so the new marble-sensors-watch.service does that
+    restart 3 s after "crash detected in slpi".
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 29 Oct 2026 13:30:00 +0800
+
 marble-device-support (1.0.0-18) unstable; urgency=medium
 
   * Make Bluetooth usable on the first boot after flashing. Cold boot leaves
