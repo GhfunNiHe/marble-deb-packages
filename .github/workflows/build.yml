@@ -1,28 +1,11 @@
 name: Build Marble Deb Packages
 
-# Everything in this repo is built here — there is deliberately no build
-# script. Each package directory is self-contained (`<pkg>/debian/` plus its
-# config/auxiliary files) and is overlaid onto a fresh upstream checkout
-# inside the workflow, mirroring sheng_fedora_packages.
-#
-# The kernel is the heavy one (ThinLTO + 1356 modules, 30-90 min even with a
-# warm ccache), so it gets its own manual-only workflow too:
-# build-kernel-deb.yml. Note that /boot ships only what the boot chain reads
-# (vmlinuz + DTB) and no initramfs is generated: this is the original port's
-# verified no-initramfs direct-boot route.
+# Each package dir is overlaid onto a fresh upstream checkout; there is no
+# build script. The kernel builds in build-kernel-deb.yml (manual only) and
+# ships vmlinuz + DTB with no initramfs.
 
-# ================================================================
-# Source parameters
-#
-# Every source address used below lives here instead of inline in the build
-# steps, and each one can be overridden for a single run from the
-# workflow_dispatch form (`*_src_repo` = repo URL, `*_src_ref` = branch / tag
-# / commit). The form shows the pins this repo builds by default: the
-# debian/changelog version for the tag-based packages and <pkg>/COMMIT for
-# the pinned git snapshots. Keep those defaults in sync when a version bumps.
-# The env fallbacks remain in place so a plain push build, or a form whose
-# field was cleared, still fetches the same revision.
-# ================================================================
+# Source parameters: overridable per run via workflow_dispatch. Empty refs
+# fall back to the changelog version or <pkg>/COMMIT; keep them in sync.
 env:
   SRC_FIRMWARE_REPO: ${{ inputs.firmware_src_repo || 'https://github.com/iLtanaka/firmware-xiaomi-marble' }}
   SRC_FIRMWARE_REF: ${{ inputs.firmware_src_ref }}          # empty = v<changelog version>
@@ -138,21 +121,13 @@ jobs:
     container:
       image: debian:trixie
     env:
-      # debian/rules would default to 10G, which is GitHub's entire
-      # per-repository cache budget: one kernel cache would evict everything.
+      # 4G each: one kernel cache would otherwise evict everything.
       CCACHE_MAXSIZE: 4G
 
     steps:
-      # Build-Depends are enforced for every package below (no -d anywhere), so
-      # this list is the union of all the debian/control files, minus what the
-      # workflow itself builds and installs. The notables: bash-completion
-      # (libqmi's meson hard-requires bash-completion.pc), dbus/polkitd/
-      # python3-dbus/python3-gi (ModemManager), python3-dev (libssc's meson
-      # mocking/ subdir hard-requires the Python headers).
-      # libqmi-glib-dev is deliberately NOT here: the libqmi step below builds
-      # 1.39.1 and installs it before anything needs it, and trixie's 1.36.0
-      # would drag in libqmi-proxy, which is version-locked to libqmi-glib5
-      # (= 1.36.0-1) and breaks the next apt run once the upgrade lands.
+      # Union of every package's Build-Depends. libqmi-glib-dev is excluded:
+      # the step below installs 1.39.1 first, and trixie's 1.36.0 pins
+      # libqmi-proxy to libqmi-glib5 (= 1.36.0-1).
       - name: Install build tools
         run: |
           apt-get update
@@ -183,19 +158,8 @@ jobs:
           mkdir -p "$HOME/.ccache"
           echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
 
-          # ccache has to be put in front of the compiler by hand. meson does
-          # NOT pick it up on its own any more: it only honours an explicit
-          # `CC="ccache gcc"` in the environment or a native file, and the
-          # `detect_compiler_cache()` helper in mesonbuild/envconfig.py is no
-          # longer called. Without this line the four meson packages
-          # (libssc, iio-sensor-proxy-ssc, libva-v4l2, modemmanager) compile
-          # straight through gcc/g++ and only the kernel, whose rules spell
-          # out CC="ccache clang", ever touches the cache.
-          #
-          # /usr/lib/ccache is the shim directory Debian's ccache package
-          # ships (symlinks named cc, gcc, c++, g++, clang, clang++, ...).
-          # Prepending it wraps every compiler every package invokes, without
-          # overriding the CC/CXX a package sets for itself.
+          # meson no longer auto-detects ccache; Debian's /usr/lib/ccache shim
+          # wraps whatever compiler each package invokes.
           if [ -d /usr/lib/ccache ]; then
             echo "PATH=/usr/lib/ccache:$PATH" >> "$GITHUB_ENV"
             ls /usr/lib/ccache
@@ -203,24 +167,9 @@ jobs:
             echo "::warning::/usr/lib/ccache is missing; the meson packages will compile uncached"
           fi
 
-      # ================================================================
-      # ccache: one pool for every C/C++ compile in this repo — all packages
-      # here and the manual kernel workflow share the key prefix.
-      #
-      # Restore and save are separate steps on purpose. The combined
-      # actions/cache action hides the save in its post step, which is
-      # declared `post-if: success()`, and its `save-always` input is
-      # deprecated because it "does not work as intended" — so a failed run
-      # silently throws away everything it compiled, and the failures worth
-      # retrying (a ThinLTO OOM, a verify assertion) all happen after the
-      # expensive compiles. `if: always()` on the save step is the documented
-      # replacement and sits at the end of the job, below.
-      #
-      # The primary key carries github.run_id because a cache entry can never
-      # be overwritten: with a stable key the first successful run would pin
-      # the entry for good and every later run would only ever read that stale
-      # copy. The restore keys then pick up the newest entry of any run.
-      # ================================================================
+      # Save is a separate always-on step: save-always is deprecated and a
+      # combined cache discards the output of failed runs. Keys carry run_id
+      # because a cache entry can never be overwritten.
       - name: Restore ccache
         uses: actions/cache/restore@v6
         with:
@@ -230,17 +179,10 @@ jobs:
             ccache-marble-${{ runner.os }}-${{ runner.arch }}-
             ccache-marble-
 
-      # ================================================================
-      # Turn the parameters above (or, when a ref is left empty, the package's
-      # own version source: debian/changelog version or <pkg>/COMMIT) into one
-      # $SRC_<PKG>_URL per package. Every build step below reads that variable
-      # and never spells a source address out itself.
-      # ================================================================
+      # One SRC_<PKG>_URL per package; build steps below never spell a URL out.
       - name: Resolve source URLs
         run: |
-          # GitLab wants the project name inside the path, GitHub and
-          # Codeberg/Gitea do not; both forms resolve a branch, a tag or a
-          # commit, so a parameter can point at any of the three.
+          # GitLab needs the project name in the path; others do not.
           src_url() {   # $1 = repo URL, $2 = ref
             case "$1" in
               *gitlab*) printf '%s/-/archive/%s/%s-%s.tar.gz\n' "$1" "$2" "$(basename "$1")" "$2" ;;
@@ -266,12 +208,10 @@ jobs:
           # each package is going to be fetched from.
           grep '^SRC_.*_URL=' "$GITHUB_ENV" | sort
 
-      # ================================================================
       # firmware: overlay debian/ onto the upstream *tag* snapshot. The tag
       # comes from debian/changelog so there is a single version source.
       # Upstream owns the blobs; debian/rules owns the install layout and
       # the wcn-prefixed Bluetooth links btqca asks for on WCN6855.
-      # ================================================================
       - name: "Build: firmware-redmi-marble"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/firmware.tar.gz" "$SRC_FIRMWARE_URL"
@@ -289,17 +229,9 @@ jobs:
           # firmware deb never reaches out/ and Verify firmware DEB fails.
           cp "$SRC"/../*.deb "$GITHUB_WORKSPACE/out/"
 
-      # ================================================================
-      # libqmi: git master, pinned. The QMI_LOC engine on this modem is
-      # AFW-gated: GPS only starts when the client identifies itself with
-      # the client-identification TLVs (clientStrId 0x10 / clientType 0x11 /
-      # enablePosRequestNotification 0x12) that went upstream via MR !470
-      # and are absent from the 1.38.0 that Debian trixie ships. ModemManager
-      # (built right after) needs libqmi-glib >= 1.37.95 plus those TLVs.
-      # The built libqmi-proxy goes into the container with the rest: the gir
-      # package depends on it, and keeping the whole set at 1.39.1 leaves no
-      # archive libqmi-proxy behind to version-lock libqmi-glib5 to 1.36.0.
-      # ================================================================
+      # libqmi: pinned git master. GPS needs the QMI_LOC client-ID TLVs
+      # (MR !470) absent from trixie's 1.38.0; ModemManager needs
+      # libqmi-glib >= 1.37.95, and the whole set must stay at 1.39.1.
       - name: "Build: libqmi"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/libqmi.tar.gz" "$SRC_LIBQMI_URL"
@@ -312,13 +244,11 @@ jobs:
                   "$RUNNER_TEMP/build"/gir1.2-qmi-1.0_*.deb "$RUNNER_TEMP/build"/libqmi-proxy_*.deb
           cp "$RUNNER_TEMP/build"/libqmi-*.deb "$RUNNER_TEMP/build"/gir1.2-qmi-*.deb "$GITHUB_WORKSPACE/out/" || true
 
-      # ================================================================
       # marble-device-support: overlay debian/ onto the upstream checkout.
       # Runs after libqmi on purpose: marble-imsctl (the IMS / SMS-over-IMS
       # enablement tool the package builds from debian/marble-imsctl.c) needs
       # qmi-glib >= 1.38 for the IMSA bind and the IMSS "services enabled"
       # message, and only the 1.39.1 dev package installed above provides it.
-      # ================================================================
       - name: "Build: marble-device-support"
         run: |
           # A ref is only used when one was filled in: --branch takes a branch
@@ -336,13 +266,11 @@ jobs:
           dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
 
-      # ================================================================
       # modemmanager: git master, pinned to the commit the AFW-unlock and
       # Position-Report patches were authored against. Stock Debian MM
       # (1.24.2) fails '--location-enable-gps-nmea' with QMI error 46 on
       # this modem: the GNSS engine refuses non-framework clients. Tests
       # are skipped (dev snapshot, one flaky test) via DEB_BUILD_OPTIONS.
-      # ================================================================
       - name: "Build: modemmanager"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/mm.tar.gz" "$SRC_MODEMMANAGER_URL"
@@ -359,12 +287,10 @@ jobs:
              "$RUNNER_TEMP/build"/libmm-glib-dev_*.deb "$RUNNER_TEMP/build"/gir1.2-modemmanager-*.deb \
              "$GITHUB_WORKSPACE/out/"
 
-      # ================================================================
       # libssc: overlay debian/ onto the upstream codeberg *tag* snapshot. The
       # tag comes from debian/changelog so there is a single version source.
       # Debian and Ubuntu do not package libssc, which is the only reason
       # their iio-sensor-proxy cannot have Qualcomm SSC support.
-      # ================================================================
       - name: "Build: libssc"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/libssc.tar.gz" "$SRC_LIBSSC_URL"
@@ -384,11 +310,9 @@ jobs:
           apt-get install -y "$GITHUB_WORKSPACE"/out/libssc_*.deb
           pkg-config --modversion libssc
 
-      # ================================================================
       # iio-sensor-proxy-ssc: stock upstream 3.9, built with SSC support on.
       # Named -ssc and declared as a replacement for iio-sensor-proxy, because
       # the archive build has no libssc to link against.
-      # ================================================================
       - name: "Build: iio-sensor-proxy-ssc"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/iio.tar.gz" "$SRC_IIO_URL"
@@ -400,26 +324,9 @@ jobs:
           dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
 
-      # ================================================================
-      # libva-v4l2: the VA-API backend for the Iris stateful V4L2 M2M
-      # decoder. Debian only ships Intel and Mesa VA drivers, so browsers
-      # and every VA-API consumer have no way to reach the Qualcomm driver
-      # without this package. Pinned to the FFT-infra fork: same
-      # mxsrc/libva-v4l2 ancestry as the radxa fork (and, at this commit,
-      # byte-identical to phxinyang/qualcomm-iris-vaapi, which it forks),
-      # but the stateful Iris backend is rewritten around three publish
-      # policies picked per surface from the client's export behaviour —
-      # Direct, Import (Chrome's zero-copy path) and Copy (GPU blit, which
-      # is also the fallback when the kernel lacks the decode-order
-      # controls, so the driver no longer refuses to start with
-      # "S_CTRL DISPLAY_DELAY ... Invalid argument").
-      #
-      # It still pairs with the iris decode-order patch in
-      # linux-redmi-marble/debian/patches, but degrades gracefully without
-      # it. The msm_drv_video.so alias libva probes for Qualcomm parts is
-      # created by debian/rules, because this upstream's meson.build only
-      # installs v4l2_drv_video.so (the radxa one did install_symlink()).
-      # ================================================================
+      # libva-v4l2: VA-API backend for Iris, not in Debian. FFT-infra fork
+      # (Direct/Import/Copy publish policies); pairs with the iris decode-order
+      # patch and degrades without it; debian/rules adds msm_drv_video.so.
       - name: "Build: libva-v4l2"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/libva-v4l2.tar.gz" "$SRC_LIBVA_URL"
@@ -430,9 +337,7 @@ jobs:
           dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/libva-v4l2_*.deb "$GITHUB_WORKSPACE/out/"
 
-      # ================================================================
       # Kernel: overlay debian/ + configs onto the upstream main snapshot
-      # ================================================================
       - name: "Build: linux-redmi-marble"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/linux-marble.tar.gz" "$SRC_KERNEL_URL"
@@ -447,14 +352,9 @@ jobs:
           cp linux-redmi-marble/config-xiaomi-marble.aarch64 "$SRC/"
 
           cd "$SRC"
-          # debian/source/format is 3.0 (native), so dpkg-source ignores
-          # debian/patches (unlike the ModemManager step, which is 3.0
-          # (quilt) and lets dpkg-source apply debian/patches/series).
-          # debian/rules applies the series in its configure target instead,
-          # so CI and a local dpkg-buildpackage run behave identically.
-          # The patches are a pair with userspace: ath11k WLAN MAC with
-          # marble-mac-restore.service (otherwise a random MAC every boot),
-          # iris decode-order output with the libva-v4l2 backend built above.
+          # 3.0 (native): dpkg-source ignores debian/patches, so debian/rules
+          # applies the series itself. ath11k MAC pairs with
+          # marble-mac-restore, iris decode-order with libva-v4l2.
           dpkg-buildpackage -b -us -uc
           echo "=== ccache stats ==="
           ccache --show-stats
@@ -472,9 +372,7 @@ jobs:
             echo "- modules: $(find "$GITHUB_WORKSPACE/out" -name '*.deb' -exec dpkg-deb -c {} \; | grep -c 'ko\.zst')"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # ================================================================
       # Verify the DEB rather than trusting "the build succeeded"
-      # ================================================================
       # /boot must contain exactly the two files the boot chain reads, and
       # vmlinuz must be the uncompressed arm64 Image (U-Boot booti cannot
       # load a gzip/zstd image). Catches regressions in debian/rules.
@@ -671,9 +569,7 @@ jobs:
           path: ~/.ccache
           key: ccache-marble-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
 
-  # ==================================================================
   # GitHub Release
-  # ==================================================================
   release:
     name: Create GitHub Release
     needs: build
