@@ -3,3 +3,4 @@ iris-decode-order-output.patch
 iris-deblocking-filter-controls.patch
 iris-preserve-timestamps-on-error-buffers.patch
 usb-c-connector-dual-role.patch
+marble-camera-imx355.patch
