@@ -1,3 +1,15 @@
+linux-redmi-marble (7.2.8+marble13) unstable; urgency=medium
+
+  * Enable USB-C dual-role on marble (usb-c-connector-dual-role.patch).
+    pmic-glink had no connector@0, so dwc3's usb-role-switch had no consumer
+    and the port stayed dr_mode=peripheral: a U-disk plugged into the phone
+    was never enumerated. Add the connector, wire port@0 to usb_1_dwc3_hs,
+    and set dr_mode=otg with role-switch-default-mode=peripheral so netboot
+    keeps its device default. Verified on hardware: usb_role switches to
+    host and xhci-hcd enumerates a USB-C audio device.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 29 Oct 2026 13:10:00 +0800
+
 linux-redmi-marble (7.2.8+marble12) unstable; urgency=medium
 
   * Expose the HEVC/H.264 deblocking filter controls the HFI gen2 encoder
