@@ -1,3 +1,19 @@
+marble-device-support (1.0.0-18) unstable; urgency=medium
+
+  * Make Bluetooth usable on the first boot after flashing. Cold boot leaves
+    hci0 at 00:00:00:00:00:00 (the QCA NV blob has no BD_ADDR), so the kernel
+    marks it HCI_UNCONFIGURED and never queues a management index while
+    bluetoothd is initialising mgmt; the public address marble-mac-restore
+    pushes afterwards only takes effect on the next controller registration,
+    so `bluetoothctl list` stayed empty until `modprobe -r hci_uart` re-bound
+    it. Restart bluetooth.service once the address is set.
+  * Mask qcom-phone-utils' bootmac-bluetooth.service: it derives its own
+    Bluetooth MAC from machine-id and races marble-mac-restore every boot,
+    overwriting the persist address (or failing with "Invalid Index" when it
+    runs before hci0 exists). The persist MAC is now the only source.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 29 Oct 2026 12:30:00 +0800
+
 marble-device-support (1.0.0-17) unstable; urgency=medium
 
   * Ship the cellular APN profile with the permissions NetworkManager

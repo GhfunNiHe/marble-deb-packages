@@ -3,22 +3,14 @@
 %:
 	dh $@
 
-# strip-nondeterminism is not available on the Fedora build host; this package
-# has no jars/archives that need normalization, so skip the step.
+# Fedora build host: no strip-nondeterminism, nothing to normalise.
 override_dh_strip_nondeterminism:
 
-# dpkg-shlibdeps cannot run on the Fedora build host (no dpkg library metadata);
-# dependencies are declared manually in debian/control.
+# dpkg-shlibdeps unavailable on Fedora; Depends live in debian/control.
 override_dh_shlibdeps:
 
-# IMS enablement (Debian overlay): the modem firmware keeps its IMS stack off
-# until the application processor states which IMS services may run - on Android
-# ims.apk does that over QMI IMSS. Without it the modem never starts registering
-# (IMSA reports "not registered, error code 0") and WMS keeps sending SMS over
-# the CS domain, which China Telecom rejects (reject cause 18). 81voltd hosts the
-# IMS Data service the modem asks for the "IMS" APN bearer on; marble-imsctl
-# sends the "Set IMS Services Enabled Setting" message and the unit re-applies it
-# on every boot (the modem stores it in NV, so the write is idempotent).
+	# IMS: the modem keeps IMS off until the AP enables it over QMI IMSS;
+	# 81voltd is the DCM/IMSD server, without both SMS/calls fail on CT.
 override_dh_auto_build:
 	dh_auto_build
 	$(CC) -O2 -Wall -Wextra \
@@ -28,24 +20,15 @@ override_dh_auto_build:
 
 override_dh_auto_install:
 	$(MAKE) PREFIX=/usr DESTDIR=debian/marble-device-support install
-	# Upstream bug fix (2026-10-12): marble-compositor-boost.service and
-	# marble-panel-on.service set ExecStart=/usr/local/sbin/<name>, but the
-	# Makefile installs those scripts as /usr/libexec/<name>.sh, so both
-	# services fail with 203/EXEC as shipped. Fix the installed copies.
+	# Upstream fix: units point at /usr/local/sbin, the Makefile installs *.sh
+	# under /usr/libexec -> 203/EXEC as shipped.
 	sed -i \
 		-e 's|^ExecStart=/usr/local/sbin/marble-compositor-boost$$|ExecStart=/usr/libexec/marble-compositor-boost.sh|' \
 		-e 's|^ExecStart=/usr/local/sbin/marble-panel-on$$|ExecStart=/usr/libexec/marble-panel-on.sh|' \
 		debian/marble-device-support/usr/lib/systemd/system/marble-compositor-boost.service \
 		debian/marble-device-support/usr/lib/systemd/system/marble-panel-on.service
-	# hexagonrpcd (Debian adaptation): upstream ships the sensor registry
-	# drop-in for hexagonrpcd-sdsp.service, the Alpine/pmOS per-DSP unit that
-	# runs /usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -s -R /usr/share/qcom/.
-	# Debian's hexagonrpcd (source package hexagonrpc) is one unit that starts
-	# the same binary, but there it is a wrapper script reading
-	# hexagonrpcd_device/_dsp/_fw_dir from the environment, so the drop-in is
-	# retargeted at hexagonrpcd.service and rewritten to use those variables.
-	# Without this the daemon would look for the sensors on the ADSP and for a
-	# registry in /var/lib/droid-juicer/sensors, neither of which exists here.
+	# Debian ships one hexagonrpcd wrapper unit, not Alpine's per-DSP
+	# hexagonrpcd-sdsp: retarget the drop-in and its env-var paths.
 	install -Dm644 debian/hexagonrpcd.service.d/60-marble.conf \
 		debian/marble-device-support/usr/lib/systemd/system/hexagonrpcd.service.d/60-marble.conf
 	rm -rf debian/marble-device-support/usr/lib/systemd/system/hexagonrpcd-sdsp.service.d
@@ -53,67 +36,43 @@ override_dh_auto_install:
 		-e 's|^Wants=hexagonrpcd-sdsp\.service$$|Wants=hexagonrpcd.service|' \
 		-e 's|^After=hexagonrpcd-sdsp\.service$$|After=hexagonrpcd.service|' \
 		debian/marble-device-support/usr/lib/systemd/system/iio-sensor-proxy.service.d/60-marble-sensors.conf
-	# The upstream iio-sensor-proxy helper only tells the proxies about
-	# hexagonrpcd; it segfaults when hexagonrpcd goes away (SLPI recovery) and
-	# Debian's unit never restarts it, so the sensors stay dead until a manual
-	# restart. Same for hexagonrpcd itself, which exits 0 on a broken FastRPC
-	# session (see the drop-in above).
+	# SLPI recovery: stale hexagonrpcd/iio-sensor-proxy look active but
+	# return dead data; restart both when the FastRPC node reappears.
 	install -Dm644 debian/iio-sensor-proxy.service.d/70-marble-restart.conf \
 		debian/marble-device-support/usr/lib/systemd/system/iio-sensor-proxy.service.d/70-marble-restart.conf
-	# Factory MAC restore for both radios, from the same persist file:
-	# copies wlan_mac.bin into the firmware directory, loads ath11k_pci (which
-	# the blacklist below keeps udev from autoloading), then programs the
-	# Bluetooth address (WLAN MAC minus one, the Xiaomi convention) through
-	# btmgmt because the stock NV blob carries no BD_ADDR. Pairs with the
-	# ath11k-load-wlan-mac-from-firmware patch in linux-redmi-marble.
+	# Factory MACs for both radios from persist; the firmware copy pairs with
+	# the ath11k wlan_mac.bin patch in linux-redmi-marble.
 	install -Dm755 debian/mac-restore.sh \
 		debian/marble-device-support/usr/libexec/marble-mac-restore.sh
 	install -Dm644 debian/marble-mac-restore.service \
 		debian/marble-device-support/usr/lib/systemd/system/marble-mac-restore.service
+	# Mask bootmac (machine-id MAC): marble-mac-restore owns both addresses.
+	install -d debian/marble-device-support/etc/systemd/system
+	ln -sfn /dev/null \
+		debian/marble-device-support/etc/systemd/system/bootmac-bluetooth.service
 	install -Dm644 debian/wlan-mac.conf \
 		debian/marble-device-support/usr/lib/modprobe.d/marble-wlan.conf
-	# Accelerometer + proximity udev tag (82, appending to iio-sensor-proxy's
-	# own 80 rule which only tags the fastrpc nodes light+compass).
+	# Accelerometer + proximity IIO tags for iio-sensor-proxy.
 	install -Dm644 debian/libssc-marble-sensors.rules \
 		debian/marble-device-support/usr/lib/udev/rules.d/82-libssc-marble-sensors.rules
-	# SLPI recovery re-arm: the same udev rule wants this unit whenever
-	# /dev/fastrpc-sdsp (re)appears, because a stale hexagonrpcd looks healthy
-	# from the outside (active, no restarts) while every sensor reading is
-	# dead - the ambient light sensor reports 0 lux after the ~79 s SLPI
-	# crash of a boot. The unit try-restarts hexagonrpcd, and the proxy
-	# follows through the PartOf= in its drop-in.
+	# SLPI recovery re-arm; see the restart drop-in above.
 	install -Dm644 debian/marble-sensors-refresh.service \
 		debian/marble-device-support/usr/lib/systemd/system/marble-sensors-refresh.service
-	# China Telecom data profile, shipped read-only under /usr/lib (NM picks
-	# read-only profiles from there since 1.36) so the rootfs has a working
-	# fallback data route without manual setup. autoconnect ships disabled:
-	# enabling it while the modem is still initializing trips the
-	# ModemManager mm_iface_modem_count_bearers assertion (upstream bug),
-	# so bring data up manually with 'nmcli con up ct-data' once registered.
+	# China Telecom fallback APN, read-only under /usr/lib (NM >= 1.36);
+	# autoconnect stays off until nmcli con up ct-data.
 	install -d debian/marble-device-support/usr/lib/NetworkManager/system-connections
 	install -m 600 debian/network-manager/ct-data.nmconnection \
 		debian/marble-device-support/usr/lib/NetworkManager/system-connections/ct-data.nmconnection
-	# IMS / SMS over IMS / VoLTE enablement. Pairs with 81voltd (Debian package),
-	# which has to be present as well: it is the DCM/IMSD server the modem asks
-	# for the IMS PDN on. CS fallback does not exist on China Telecom, so
-	# without both pieces SMS and calls are impossible.
+	# IMS/VoLTE helpers; requires 81voltd for the IMS PDN.
 	install -Dm755 marble-imsctl debian/marble-device-support/usr/libexec/marble-imsctl
 	install -Dm755 debian/marble-ims-enable.sh debian/marble-device-support/usr/libexec/marble-ims-enable.sh
 	install -Dm644 debian/marble-ims-enable.service \
 		debian/marble-device-support/usr/lib/systemd/system/marble-ims-enable.service
-	# qbootctl marks the running A/B slot successful. Its unit only orders
-	# itself after local-fs.target, so wait for the boot_a/boot_b device units
-	# created by udev before it runs; otherwise ABL eventually falls back to
-	# fastboot when the slot retry counter drains.
+	# Wait for boot_a/boot_b udev units before qbootctl marks the slot good.
 	install -Dm644 debian/qbootctl.service.d/wait-for-partitions.conf \
 		debian/marble-device-support/usr/lib/systemd/system/qbootctl.service.d/wait-for-partitions.conf
-	# Modem bring-up. qcom-phone-utils' qcom-modem-setup gives the SIM only one
-	# second before declaring the card missing; this modem's UIM needs about
-	# ten. The stock script therefore always lost the race, never activated the
-	# primary GW provisioning session, and ModemManager settled on
-	# failed/sim-missing - which also means no "unlock-required: sim-pin", i.e.
-	# no PIN prompt at all. The wrapper re-runs the stock script with a 30 s
-	# budget, and the timer restarts the stack once if it failed anyway.
+	# qcom-modem-setup gives the SIM 1 s but this UIM needs ~10 s; the wrapper
+	# raises it to 30 s and the timer retries once.
 	install -Dm755 debian/modem-sim-wait.sh \
 		debian/marble-device-support/usr/libexec/marble-modem-setup
 	install -Dm644 debian/qcom-modem-setup.service.d/10-marble-sim-wait.conf \
@@ -125,7 +84,7 @@ override_dh_auto_install:
 	install -Dm644 debian/marble-modem-recover.timer \
 		debian/marble-device-support/usr/lib/systemd/system/marble-modem-recover.timer
 
-# Put back the 0600 that dh_fixperms strips; why it matters is in 1.0.0-17.
+# dh_fixperms strips the 0600 NetworkManager requires (see 1.0.0-17).
 override_dh_fixperms:
 	dh_fixperms
 	chmod 600 debian/marble-device-support/usr/lib/NetworkManager/system-connections/ct-data.nmconnection
