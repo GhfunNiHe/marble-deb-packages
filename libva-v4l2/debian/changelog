@@ -38,7 +38,7 @@ libva-v4l2 (1.0.0-3) unstable; urgency=medium
     iris_driver QUERYCAP name at runtime instead of a /dev/videoN literal.
   * Ships the upstream iris-vaapi-browser launcher and its
     "Google Chrome (Iris VA-API)" desktop entry (installed by meson).
-  * Still pairs with the iris decode-order patch in linux-redmi-marble, but
+  * Still pairs with the iris decode-order patch in linux-xiaomi-marble, but
     no longer requires it: without the display-delay controls the driver
     degrades to GPU copy instead of aborting with "Invalid argument".
 
@@ -50,7 +50,7 @@ libva-v4l2 (1.0.0-2) unstable; urgency=medium
     speaks the Iris stateful V4L2 M2M interface (upstream mxsrc/libva-v4l2 is
     stateless-only), and Debian ships no Qualcomm VA driver at all, so
     browsers and ffmpeg otherwise have no hardware decode path.
-  * Pairs with the iris decode-order patch in linux-redmi-marble: the backend
+  * Pairs with the iris decode-order patch in linux-xiaomi-marble: the backend
     sets V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY{,_ENABLE} in its decoder
     constructor and aborts with "Invalid argument" when the kernel does not
     expose them. Verified on marble (SM7475): H.264, HEVC and VP9 1080p all

@@ -21,17 +21,17 @@ env:
   SRC_IIO_REF: ${{ inputs.iio_src_ref }}                    # empty = <changelog version>
   SRC_LIBVA_REPO: ${{ inputs.libva_src_repo || 'https://github.com/FFT-infra/qualcomm-iris-vaapi' }}
   SRC_LIBVA_REF: ${{ inputs.libva_src_ref || 'feat/encode-entrypoints' }}  # empty = feat/encode-entrypoints
-  SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/iLtanaka/linux-marble' }}
-  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}              # empty = main
+  SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/GhfunNiHe/linux-marble' }}
+  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}              # empty = 7.2.8
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'linux-redmi-marble/**'
+      - 'linux-xiaomi-marble/**'
       - 'marble-device-support/**'
-      - 'firmware-redmi-marble/**'
+      - 'firmware-xiaomi-marble/**'
       - 'libssc/**'
       - 'libqmi/**'
       - 'modemmanager/**'
@@ -44,11 +44,11 @@ on:
       # workflow_dispatch 的 default 不能引用表达式，所以版本号需要与
       # debian/changelog、<pkg>/COMMIT 手动保持一致。
       firmware_src_repo:
-        description: 'firmware-redmi-marble 源码仓库地址 (repo URL)'
+        description: 'firmware-xiaomi-marble 源码仓库地址 (repo URL)'
         type: string
         default: 'https://github.com/iLtanaka/firmware-xiaomi-marble'
       firmware_src_ref:
-        description: 'firmware-redmi-marble 的 tag/分支/提交（留空 = v<debian/changelog 版本>）'
+        description: 'firmware-xiaomi-marble 的 tag/分支/提交（留空 = v<debian/changelog 版本>）'
         type: string
         default: ''
       libqmi_src_repo:
@@ -102,11 +102,11 @@ on:
       kernel_src_repo:
         description: 'linux-marble 内核源码仓库地址 (repo URL)'
         type: string
-        default: 'https://github.com/iLtanaka/linux-marble'
+        default: 'https://github.com/GhfunNiHe/linux-marble'
       kernel_src_ref:
         description: 'linux-marble 的分支/tag/提交'
         type: string
-        default: 'main'
+        default: '7.2.8'
 
 # Rebuilds supersede each other; never queue them up.
 concurrency:
@@ -153,7 +153,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/build" "$GITHUB_WORKSPACE/out"
           # One ccache directory for every compile in the job: $HOME/.ccache,
-          # which is also what linux-redmi-marble/debian/rules defaults to
+          # which is also what linux-xiaomi-marble/debian/rules defaults to
           # (${CCACHE_DIR:-$HOME/.ccache}) and what is cached below.
           mkdir -p "$HOME/.ccache"
           echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
@@ -190,7 +190,7 @@ jobs:
             esac
           }
 
-          FWVER=$(dpkg-parsechangelog -l firmware-redmi-marble/debian/changelog -SVersion | cut -d- -f1)
+          FWVER=$(dpkg-parsechangelog -l firmware-xiaomi-marble/debian/changelog -SVersion | cut -d- -f1)
           LSVER=$(dpkg-parsechangelog -l libssc/debian/changelog -SVersion | cut -d- -f1)
           IIOVER=$(dpkg-parsechangelog -l iio-sensor-proxy-ssc/debian/changelog -SVersion | cut -d- -f1)
 
@@ -201,7 +201,7 @@ jobs:
             echo "SRC_LIBSSC_URL=$(src_url "$SRC_LIBSSC_REPO" "${SRC_LIBSSC_REF:-v$LSVER}")"
             echo "SRC_IIO_URL=$(src_url "$SRC_IIO_REPO" "${SRC_IIO_REF:-$IIOVER}")"
             echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-feat/encode-entrypoints}")"
-            echo "SRC_KERNEL_URL=$(src_url "$SRC_KERNEL_REPO" "${SRC_KERNEL_REF:-main}")"
+            echo "SRC_KERNEL_URL=$(src_url "$SRC_KERNEL_REPO" "${SRC_KERNEL_REF:-7.2.8}")"
           } >> "$GITHUB_ENV"
 
           # A wrong parameter shows up as a 404 in the next step, so print what
@@ -212,7 +212,7 @@ jobs:
       # comes from debian/changelog so there is a single version source.
       # Upstream owns the blobs; debian/rules owns the install layout and
       # the wcn-prefixed Bluetooth links btqca asks for on WCN6855.
-      - name: "Build: firmware-redmi-marble"
+      - name: "Build: firmware-xiaomi-marble"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/firmware.tar.gz" "$SRC_FIRMWARE_URL"
           mkdir -p "$RUNNER_TEMP/build/fw"
@@ -220,7 +220,7 @@ jobs:
           SRC=$(find "$RUNNER_TEMP/build/fw" -mindepth 1 -maxdepth 1 -type d | head -1)
           [ -n "$SRC" ] || { echo "FAIL: firmware tarball has no top-level directory"; exit 1; }
 
-          cp -a firmware-redmi-marble/debian "$SRC/debian"
+          cp -a firmware-xiaomi-marble/debian "$SRC/debian"
           cd "$SRC"
           dpkg-buildpackage -b -us -uc
           # dpkg-buildpackage drops the .deb one level up from $SRC, i.e. in
@@ -338,7 +338,7 @@ jobs:
           cp "$RUNNER_TEMP/build"/libva-v4l2_*.deb "$GITHUB_WORKSPACE/out/"
 
       # Kernel: overlay debian/ + configs onto the upstream main snapshot
-      - name: "Build: linux-redmi-marble"
+      - name: "Build: linux-xiaomi-marble"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/linux-marble.tar.gz" "$SRC_KERNEL_URL"
           # The tarball's top-level directory is <repo>-<ref>, so it changes
@@ -348,13 +348,14 @@ jobs:
           tar -xf "$RUNNER_TEMP/build/linux-marble.tar.gz" -C "$RUNNER_TEMP/build/kernel-src"
           SRC=$(find "$RUNNER_TEMP/build/kernel-src" -mindepth 1 -maxdepth 1 -type d | head -1)
           [ -n "$SRC" ] || { echo "FAIL: kernel tarball has no top-level directory"; exit 1; }
-          cp -a linux-redmi-marble/debian "$SRC/debian"
-          cp linux-redmi-marble/config-xiaomi-marble.aarch64 "$SRC/"
+          cp -a linux-xiaomi-marble/debian "$SRC/debian"
+          cp linux-xiaomi-marble/config-xiaomi-marble.aarch64 "$SRC/"
 
           cd "$SRC"
-          # 3.0 (native): dpkg-source ignores debian/patches, so debian/rules
-          # applies the series itself. ath11k MAC pairs with
-          # marble-mac-restore, iris decode-order with libva-v4l2.
+          # The tree already carries our patches (see SRC_KERNEL_REF), so
+          # debian/patches is gone and debian/rules only syncs the config.
+          # ath11k MAC pairs with marble-mac-restore, iris decode-order with
+          # libva-v4l2.
           dpkg-buildpackage -b -us -uc
           echo "=== ccache stats ==="
           ccache --show-stats
@@ -378,7 +379,7 @@ jobs:
       # load a gzip/zstd image). Catches regressions in debian/rules.
       - name: Verify kernel DEB
         run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/linux-redmi-marble_*.deb | head -1)
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/linux-xiaomi-marble_*.deb | head -1)
           [ -n "$DEB" ] || { echo "FAIL: no kernel deb built"; exit 1; }
           dpkg-deb -f "$DEB" Package Version Architecture Depends
 
@@ -422,7 +423,7 @@ jobs:
       # with -ENOENT on WCN6855 while the blobs look present on disk.
       - name: Verify firmware DEB
         run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/firmware-redmi-marble_*.deb | head -1)
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/firmware-xiaomi-marble_*.deb | head -1)
           [ -n "$DEB" ] || { echo "FAIL: no firmware deb built"; exit 1; }
           dpkg-deb -f "$DEB" Package Version Architecture Recommends
 

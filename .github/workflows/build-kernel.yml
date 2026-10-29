@@ -26,19 +26,19 @@ on:
       kernel_src_repo:
         description: 'linux-marble 内核源码仓库地址 (repo URL)'
         type: string
-        default: 'https://github.com/iLtanaka/linux-marble'
+        default: 'https://github.com/GhfunNiHe/linux-marble'
       kernel_src_ref:
         description: 'linux-marble 的分支/tag/提交'
         type: string
-        default: 'main'
+        default: '7.2.8'
 
 # ================================================================
 # Source parameters, same contract as build-marble-debs.yml: the repo URL and
 # the optional ref can be filled in per run, an empty ref keeps the default.
 # ================================================================
 env:
-  SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/iLtanaka/linux-marble' }}
-  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}   # empty = main
+  SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/GhfunNiHe/linux-marble' }}
+  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}   # empty = 7.2.8
 
 # Kernel rebuilds supersede each other; never queue them up.
 concurrency:
@@ -109,7 +109,7 @@ jobs:
           # GitLab wants the project name inside the path, GitHub and
           # Codeberg/Gitea do not; both forms resolve a branch, a tag or a
           # commit, so the ref parameter can point at any of the three.
-          REF="${SRC_KERNEL_REF:-main}"
+          REF="${SRC_KERNEL_REF:-7.2.8}"
           case "$SRC_KERNEL_REPO" in
             *gitlab*) URL="$SRC_KERNEL_REPO/-/archive/$REF/$(basename "$SRC_KERNEL_REPO")-$REF.tar.gz" ;;
             *)        URL="$SRC_KERNEL_REPO/archive/$REF.tar.gz" ;;
@@ -128,8 +128,8 @@ jobs:
 
       - name: Overlay debian/ and configs
         run: |
-          cp -a linux-redmi-marble/debian "$KSRC/debian"
-          cp linux-redmi-marble/config-xiaomi-marble.aarch64 "$KSRC/"
+          cp -a linux-xiaomi-marble/debian "$KSRC/debian"
+          cp linux-xiaomi-marble/config-xiaomi-marble.aarch64 "$KSRC/"
 
       - name: Build kernel
         run: |
@@ -155,7 +155,7 @@ jobs:
       # gzip/zstd image). Assert it on the deliverable, not on the build tree.
       - name: Verify kernel DEB
         run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/linux-redmi-marble_*.deb | head -1)
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/linux-xiaomi-marble_*.deb | head -1)
           [ -n "$DEB" ] || { echo "FAIL: no kernel deb built"; exit 1; }
           dpkg-deb -f "$DEB" Package Version Architecture Depends
 
@@ -223,7 +223,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: kernel-deb-${{ env.SHORT_SHA }}
-          name: Kernel linux-redmi-marble (${{ env.SHORT_SHA }})
+          name: Kernel linux-xiaomi-marble (${{ env.SHORT_SHA }})
           files: debs/**/*.deb
           prerelease: ${{ inputs.prerelease }}
           draft: false

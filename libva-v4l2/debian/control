@@ -19,7 +19,7 @@ Description: VA-API backend for Qualcomm Iris stateful V4L2 devices
  Hardware video decoding through the Qualcomm Iris stateful V4L2 M2M
  interface, for SM8550 and SM7475 (Xiaomi Poco F5 / Redmi Note 12 Turbo,
  marble). Requires a kernel whose Iris driver exposes the decoder (see the
- iris decode-order patch in linux-redmi-marble) and a matching firmware.
+ iris decode-order patch in linux-xiaomi-marble) and a matching firmware.
  .
  Decoded frames reach the client through one of three publish policies
  chosen per surface: Direct (the completed CAPTURE slot itself is handed

@@ -1,5 +1,5 @@
 #!/bin/sh
-# postinst for linux-redmi-marble (no-initramfs direct-boot route, same as
+# postinst for linux-xiaomi-marble (no-initramfs direct-boot route, same as
 # the original project's verified path: alt.conf has no initrd line):
 #   1. verify that /boot/efi is vfat and identifies as ESP by either
 #      PARTLABEL=esp or filesystem LABEL=ESP. The latter also covers the
@@ -16,7 +16,7 @@ set -e
 
 # Kernel release: authoritative source is the installed marker file,
 # falling back to the newest modules directory.
-KREL=$(cat /usr/share/linux-redmi-marble/kernel.release 2>/dev/null || true)
+KREL=$(cat /usr/share/linux-xiaomi-marble/kernel.release 2>/dev/null || true)
 if [ -z "$KREL" ]; then
 	KREL=$(ls -dt /usr/lib/modules/*/ 2>/dev/null | head -1 | sed 's#/$##; s#.*/##')
 fi
@@ -24,26 +24,26 @@ fi
 case "$1" in
 	configure)
 		if [ -z "$KREL" ]; then
-			echo "linux-redmi-marble: no kernel modules found, skipping" >&2
+			echo "linux-xiaomi-marble: no kernel modules found, skipping" >&2
 			exit 0
 		fi
 
 		# 1. The boot chain cannot be updated without the expected ESP.
 		if [ ! -d /boot/efi ]; then
-			echo "linux-redmi-marble: ERROR: ESP mount point /boot/efi was not found." >&2
+			echo "linux-xiaomi-marble: ERROR: ESP mount point /boot/efi was not found." >&2
 			echo "  Ensure the ESP exists and is configured in /etc/fstab, mount it at /boot/efi," >&2
 			echo "  then run: dpkg --configure -a" >&2
 			exit 1
 		fi
 		if ! mountpoint -q /boot/efi; then
-			echo "linux-redmi-marble: ERROR: ESP is not mounted at /boot/efi." >&2
+			echo "linux-xiaomi-marble: ERROR: ESP is not mounted at /boot/efi." >&2
 			echo "  Mount the ESP at /boot/efi, then run: dpkg --configure -a" >&2
 			exit 1
 		fi
 
 		ESP_FSTYPE=$(findmnt -n -o FSTYPE --target /boot/efi 2>/dev/null || true)
 		if [ "$ESP_FSTYPE" != vfat ]; then
-			echo "linux-redmi-marble: ERROR: /boot/efi is not a vfat ESP (found: ${ESP_FSTYPE:-unknown})." >&2
+			echo "linux-xiaomi-marble: ERROR: /boot/efi is not a vfat ESP (found: ${ESP_FSTYPE:-unknown})." >&2
 			echo "  Refusing to write boot files. Unmount it and mount the marble ESP" >&2
 			echo "  (PARTLABEL=esp or LABEL=ESP) at /boot/efi, then run:" >&2
 			echo "  dpkg --configure -a" >&2
@@ -54,7 +54,7 @@ case "$1" in
 		ESP_LABEL=$(findmnt -n -o LABEL --target /boot/efi 2>/dev/null || true)
 		if [ "$ESP_PARTLABEL" != esp ] &&
 		   [ "$ESP_LABEL" != ESP ] && [ "$ESP_LABEL" != esp ]; then
-			echo "linux-redmi-marble: ERROR: /boot/efi is vfat but has PARTLABEL='${ESP_PARTLABEL:-<empty>}' and LABEL='${ESP_LABEL:-<empty>}'." >&2
+			echo "linux-xiaomi-marble: ERROR: /boot/efi is vfat but has PARTLABEL='${ESP_PARTLABEL:-<empty>}' and LABEL='${ESP_LABEL:-<empty>}'." >&2
 			echo "  Expected PARTLABEL=esp or filesystem LABEL=ESP." >&2
 			echo "  Unmount it and mount the marble ESP at /boot/efi, then run:" >&2
 			echo "  dpkg --configure -a" >&2
@@ -64,7 +64,7 @@ case "$1" in
 		# 2. Never replace a working kernel/DTB if the upgrade has no boot
 		#    entry to reach them. Recovery must happen before configuration.
 		if [ -n "$2" ] && [ ! -f /boot/efi/extlinux/extlinux.conf ]; then
-			echo "linux-redmi-marble: ERROR: upgrade found no /boot/efi/extlinux/extlinux.conf." >&2
+			echo "linux-xiaomi-marble: ERROR: upgrade found no /boot/efi/extlinux/extlinux.conf." >&2
 			echo "  The kernel and DTB were not replaced. Restore the existing boot entry" >&2
 			echo "  on the ESP, then run: dpkg --configure -a" >&2
 			exit 1
@@ -101,7 +101,7 @@ case "$1" in
 			fi
 			if [ -z "$ROOT_SPEC" ]; then
 				ROOT_SPEC="PARTLABEL=linux"
-				echo "linux-redmi-marble: no root entry in /etc/fstab, falling back to root=$ROOT_SPEC" >&2
+				echo "linux-xiaomi-marble: no root entry in /etc/fstab, falling back to root=$ROOT_SPEC" >&2
 			fi
 
 			# extlinux.conf: cmdline is version-independent; U-Boot's default
@@ -116,9 +116,9 @@ label marble
 	fdt /marble/sm8475-xiaomi-marble.dtb
 	append root=$ROOT_SPEC rootwait rw console=tty0 loglevel=4 printk.devkmsg=on pstore.compress=none log_buf_len=2M msm_geni_serial.con_enabled=0 clk_ignore_unused pd_ignore_unused regulator_ignore_unused fw_devlink=permissive pcie_aspm=off
 EOF
-			echo "linux-redmi-marble: ESP synced (vmlinuz + dtb) and extlinux.conf created for $KREL, root=$ROOT_SPEC"
+			echo "linux-xiaomi-marble: ESP synced (vmlinuz + dtb) and extlinux.conf created for $KREL, root=$ROOT_SPEC"
 		else
-			echo "linux-redmi-marble: ESP synced (vmlinuz + dtb) for $KREL; existing extlinux.conf left unchanged"
+			echo "linux-xiaomi-marble: ESP synced (vmlinuz + dtb) for $KREL; existing extlinux.conf left unchanged"
 		fi
 		;;
 esac

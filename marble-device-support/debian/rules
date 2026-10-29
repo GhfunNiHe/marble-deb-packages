@@ -41,7 +41,7 @@ override_dh_auto_install:
 	install -Dm644 debian/iio-sensor-proxy.service.d/70-marble-restart.conf \
 		debian/marble-device-support/usr/lib/systemd/system/iio-sensor-proxy.service.d/70-marble-restart.conf
 	# Factory MACs for both radios from persist; the firmware copy pairs with
-	# the ath11k wlan_mac.bin patch in linux-redmi-marble.
+	# the ath11k wlan_mac.bin patch in linux-xiaomi-marble.
 	install -Dm755 debian/marble-helper \
 		debian/marble-device-support/usr/libexec/marble-helper
 	install -Dm644 debian/marble-mac-restore.service \

@@ -1,4 +1,4 @@
-Source: firmware-redmi-marble
+Source: firmware-xiaomi-marble
 Section: kernel
 Priority: optional
 Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
@@ -9,10 +9,10 @@ Homepage: https://github.com/iLtanaka/firmware-xiaomi-marble
 Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
 Rules-Requires-Root: no
 
-Package: firmware-redmi-marble
+Package: firmware-xiaomi-marble
 Architecture: all
 Depends: ${misc:Depends}
-Recommends: linux-redmi-marble
+Recommends: linux-xiaomi-marble
 Breaks: firmware-xiaomi-marble
 Replaces: firmware-xiaomi-marble
 Provides: firmware-xiaomi-marble (= ${source:Version})

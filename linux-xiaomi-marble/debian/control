@@ -1,4 +1,4 @@
-Source: linux-redmi-marble
+Source: linux-xiaomi-marble
 Section: kernel
 Priority: optional
 Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
@@ -22,10 +22,10 @@ Standards-Version: 4.6.2
 Homepage: https://github.com/iLtanaka/linux-marble
 Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
 
-Package: linux-redmi-marble
+Package: linux-xiaomi-marble
 Architecture: arm64
 Depends: ${misc:Depends}, kmod, linux-base
-Recommends: firmware-redmi-marble
+Recommends: firmware-xiaomi-marble
 Description: Linux kernel for Xiaomi Redmi Note 12 Turbo (marble)
  Mainline Linux 7.2.8 kernel with the marble (Poco F5 / Redmi Note 12 Turbo,
  SM7475) device enablement patches from the iLtanaka linux-marble tree.

@@ -281,7 +281,7 @@ marble-device-support (1.0.0-3) unstable; urgency=medium
     /lib/firmware/ath11k/WCN6855/hw2.1/ and then modprobes ath11k_pci
     (blacklisted in usr/lib/modprobe.d/marble-wlan.conf so udev cannot load
     it earlier). Pairs with the ath11k-load-wlan-mac-from-firmware patch in
-    linux-redmi-marble: without it the interface gets a fresh random MAC at
+    linux-xiaomi-marble: without it the interface gets a fresh random MAC at
     every boot and NM's "restore the permanent address" fails EADDRNOTAVAIL
     ('config-failed' on connection activation).
 

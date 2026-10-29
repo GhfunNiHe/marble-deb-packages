@@ -1,0 +1,19 @@
+linux-xiaomi-marble (7.2.8+marble0) unstable; urgency=medium
+
+  * Rename the source and binary package from linux-redmi-marble to
+    linux-xiaomi-marble, matching the vendor name used by the firmware and
+    device packages. The revision restarts at 0 under the new name.
+  * Build from the project's own kernel tree (GhfunNiHe/linux-marble, branch
+    7.2.8) instead of applying quilt patches to upstream main. That branch
+    already carries the ath11k WLAN MAC fix, USB-C dual role, the three iris
+    encoder fixes, the IMX355 camera pipeline and the PM8350C flash LED, so
+    debian/patches is gone and debian/rules no longer applies anything.
+  * Keep data-lanes 0-based for every camera endpoint. camss feeds
+    mipi_csi2->data_lanes[i] straight into the lane mask without subtracting
+    one, so the vendor 1-based <1 2 3 4> enables the wrong PHY lanes and
+    fails without any error.
+  * Camera sensor nodes must not carry power-domains: the imx355, s5k3p9 and
+    gc02m1 bindings reject it. TITAN_TOP_GDSC is held by cci0/cci1 and the
+    IFE GDSCs by the camss node itself.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 29 Oct 2026 23:10:00 +0800

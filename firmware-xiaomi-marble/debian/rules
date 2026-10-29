@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-PKG    = firmware-redmi-marble
+PKG    = firmware-xiaomi-marble
 FW     = /usr/lib/firmware
 MARBLE = $(FW)/qcom/sm8475/xiaomi/marble
 DEST   = debian/$(PKG)

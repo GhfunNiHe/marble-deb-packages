@@ -1,0 +1,10 @@
+firmware-xiaomi-marble (20261008-0) unstable; urgency=medium
+
+  * Rename the source and binary package from firmware-redmi-marble back to
+    firmware-xiaomi-marble, matching the upstream blob repository and the
+    other device packages. The revision restarts at 0 under the new name.
+  * Package the marble firmware set: ADSP, SLPI, modem, Adreno, IPA,
+    WCN6855 Wi-Fi/Bluetooth, the sensor registry and the HexagonFS tree,
+    including the Bluetooth firmware symlinks the WCN6855 load path needs.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 29 Oct 2026 22:40:00 +0800
