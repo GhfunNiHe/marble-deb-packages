@@ -4,7 +4,7 @@ linux-xiaomi-marble (7.2.8+marble0) unstable; urgency=medium
     linux-xiaomi-marble, matching the vendor name used by the firmware and
     device packages. The revision restarts at 0 under the new name.
   * Build from the project's own kernel tree (GhfunNiHe/linux-marble, branch
-    7.2.8) instead of applying quilt patches to upstream main. That branch
+    marble-7.2) instead of applying quilt patches to upstream main. That branch
     already carries the ath11k WLAN MAC fix, USB-C dual role, the three iris
     encoder fixes, the IMX355 camera pipeline and the PM8350C flash LED, so
     debian/patches is gone and debian/rules no longer applies anything.

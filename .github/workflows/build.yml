@@ -22,7 +22,7 @@ env:
   SRC_LIBVA_REPO: ${{ inputs.libva_src_repo || 'https://github.com/FFT-infra/qualcomm-iris-vaapi' }}
   SRC_LIBVA_REF: ${{ inputs.libva_src_ref || 'feat/encode-entrypoints' }}  # empty = feat/encode-entrypoints
   SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/GhfunNiHe/linux-marble' }}
-  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}              # empty = 7.2.8
+  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}              # empty = marble-7.2
 
 on:
   push:
@@ -106,7 +106,7 @@ on:
       kernel_src_ref:
         description: 'linux-marble 的分支/tag/提交'
         type: string
-        default: '7.2.8'
+        default: 'marble-7.2'
 
 # Rebuilds supersede each other; never queue them up.
 concurrency:
@@ -201,7 +201,7 @@ jobs:
             echo "SRC_LIBSSC_URL=$(src_url "$SRC_LIBSSC_REPO" "${SRC_LIBSSC_REF:-v$LSVER}")"
             echo "SRC_IIO_URL=$(src_url "$SRC_IIO_REPO" "${SRC_IIO_REF:-$IIOVER}")"
             echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-feat/encode-entrypoints}")"
-            echo "SRC_KERNEL_URL=$(src_url "$SRC_KERNEL_REPO" "${SRC_KERNEL_REF:-7.2.8}")"
+            echo "SRC_KERNEL_URL=$(src_url "$SRC_KERNEL_REPO" "${SRC_KERNEL_REF:-marble-7.2}")"
           } >> "$GITHUB_ENV"
 
           # A wrong parameter shows up as a 404 in the next step, so print what

@@ -30,7 +30,7 @@ on:
       kernel_src_ref:
         description: 'linux-marble 的分支/tag/提交'
         type: string
-        default: '7.2.8'
+        default: 'marble-7.2'
 
 # ================================================================
 # Source parameters, same contract as build-marble-debs.yml: the repo URL and
@@ -38,7 +38,7 @@ on:
 # ================================================================
 env:
   SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/GhfunNiHe/linux-marble' }}
-  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}   # empty = 7.2.8
+  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}   # empty = marble-7.2
 
 # Kernel rebuilds supersede each other; never queue them up.
 concurrency:
@@ -109,7 +109,7 @@ jobs:
           # GitLab wants the project name inside the path, GitHub and
           # Codeberg/Gitea do not; both forms resolve a branch, a tag or a
           # commit, so the ref parameter can point at any of the three.
-          REF="${SRC_KERNEL_REF:-7.2.8}"
+          REF="${SRC_KERNEL_REF:-marble-7.2}"
           case "$SRC_KERNEL_REPO" in
             *gitlab*) URL="$SRC_KERNEL_REPO/-/archive/$REF/$(basename "$SRC_KERNEL_REPO")-$REF.tar.gz" ;;
             *)        URL="$SRC_KERNEL_REPO/archive/$REF.tar.gz" ;;
