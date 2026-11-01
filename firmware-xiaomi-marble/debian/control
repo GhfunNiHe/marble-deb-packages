@@ -4,6 +4,8 @@ Priority: optional
 Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
 Build-Depends:
  debhelper-compat (= 13),
+ alsa-utils,
+ python3,
 Standards-Version: 4.6.2
 Homepage: https://github.com/iLtanaka/firmware-xiaomi-marble
 Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git

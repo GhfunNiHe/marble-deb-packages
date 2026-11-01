@@ -8,10 +8,24 @@ DEST   = debian/$(PKG)
 %:
 	dh $@
 
-# Pure data package: no upstream buildsystem, no tests.
+# Signed firmware stays byte-for-byte identical. Only the ALSA DSP graph is
+# compiled on the host, adding the missing WCD9385 RX0 playback backend.
 override_dh_auto_configure:
 override_dh_auto_build:
+	alsatplg -d generic/SM8475-Xiaomi-Marble-tplg.bin -o debian/topology-base.conf
+	python3 debian/topology/add-wcd-playback.py debian/topology-base.conf \
+		debian/topology/headphone-backend.conf debian/topology-headset.conf \
+		generic/SM8475-Xiaomi-Marble-tplg.bin
+	alsatplg -c debian/topology-headset.conf -o debian/SM8475-Xiaomi-Marble-tplg.bin
 override_dh_auto_test:
+	alsatplg -d debian/SM8475-Xiaomi-Marble-tplg.bin -o debian/topology-verified.conf
+	grep -q 'RX_CODEC_DMA_RX_0 Audio Mixer' debian/topology-verified.conf
+	grep -q 'TERTIARY_TDM_RX_0 Audio Mixer' debian/topology-verified.conf
+	grep -q 'TX_CODEC_DMA_TX_3' debian/topology-verified.conf
+
+override_dh_auto_clean:
+	rm -f debian/topology-base.conf debian/topology-headset.conf \
+		debian/topology-verified.conf debian/SM8475-Xiaomi-Marble-tplg.bin
 
 # strip-nondeterminism is missing on the Fedora dev host; the blobs are
 # opaque signed binaries and must be shipped byte-for-byte anyway.
@@ -31,7 +45,7 @@ override_dh_auto_install:
 	install -Dm644 generic/qcom/a730_sqe.fw generic/qcom/gmu_gen70000.bin \
 		-t $(DEST)$(FW)/qcom
 	install -Dm644 generic/qcom/vpu/* -t $(DEST)$(FW)/qcom/vpu
-	install -Dm644 generic/SM8475-Xiaomi-Marble-tplg.bin \
+	install -Dm644 debian/SM8475-Xiaomi-Marble-tplg.bin \
 		-t $(DEST)$(FW)/qcom/sm8450
 
 	# btqca wants qca/wcnhpbtfw21.tlv on WCN6855, upstream only ships the

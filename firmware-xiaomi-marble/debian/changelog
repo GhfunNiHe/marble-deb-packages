@@ -1,3 +1,12 @@
+firmware-xiaomi-marble (20261008-1) UNRELEASED; urgency=medium
+
+  * Generate the missing WCD9385 RX0 ALSA playback graph using the SM8450
+    AudioReach layout, preserving existing speaker and capture graph entries.
+  * Keep signed firmware blobs unchanged and verify all three audio backends.
+  * Work around the empty-manifest decoder artifact before recompiling topology.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Sun, 01 Nov 2026 02:00:00 +0800
+
 firmware-xiaomi-marble (20261008-0) unstable; urgency=medium
 
   * Rename the source and binary package from firmware-redmi-marble back to
