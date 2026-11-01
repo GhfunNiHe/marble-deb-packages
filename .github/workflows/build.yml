@@ -11,7 +11,7 @@ env:
   SRC_FIRMWARE_REF: ${{ inputs.firmware_src_ref }}          # empty = v<changelog version>
   SRC_LIBQMI_REPO: ${{ inputs.libqmi_src_repo || 'https://gitlab.freedesktop.org/mobile-broadband/libqmi' }}
   SRC_LIBQMI_REF: ${{ inputs.libqmi_src_ref }}              # empty = libqmi/COMMIT
-  SRC_DEVSUPPORT_REPO: ${{ inputs.devsupport_src_repo || 'https://github.com/iLtanaka/marble-device-support' }}
+  SRC_DEVSUPPORT_REPO: ${{ inputs.devsupport_src_repo || 'https://github.com/GhfunNiHe/marble-device-support' }}
   SRC_DEVSUPPORT_REF: ${{ inputs.devsupport_src_ref }}      # empty = upstream default branch
   SRC_MODEMMANAGER_REPO: ${{ inputs.modemmanager_src_repo || 'https://gitlab.freedesktop.org/mobile-broadband/ModemManager' }}
   SRC_MODEMMANAGER_REF: ${{ inputs.modemmanager_src_ref }}  # empty = modemmanager/COMMIT
@@ -62,7 +62,7 @@ on:
       devsupport_src_repo:
         description: 'marble-device-support 源码仓库地址 (repo URL)'
         type: string
-        default: 'https://github.com/iLtanaka/marble-device-support'
+        default: 'https://github.com/GhfunNiHe/marble-device-support'
       devsupport_src_ref:
         description: 'marble-device-support 的分支/tag（留空 = 上游默认分支）'
         type: string
@@ -134,7 +134,7 @@ jobs:
           apt-get install -y --no-install-recommends \
             build-essential debhelper fakeroot dpkg-dev ccache git ca-certificates wget \
             bc bison flex libssl-dev libelf-dev dwarves \
-            rsync cpio kmod python3 zstd xz-utils lz4 \
+            rsync cpio kmod python3 zstd xz-utils lz4 alsa-utils \
             clang lld llvm \
             meson ninja-build pkg-config \
             libglib2.0-dev libprotobuf-c-dev \
@@ -246,7 +246,7 @@ jobs:
 
       # marble-device-support: overlay debian/ onto the upstream checkout.
       # Runs after libqmi on purpose: marble-imsctl (the IMS / SMS-over-IMS
-      # enablement tool the package builds from debian/marble-imsctl.c) needs
+      # enablement tool the package builds from src/marble-imsctl.c) needs
       # qmi-glib >= 1.38 for the IMSA bind and the IMSS "services enabled"
       # message, and only the 1.39.1 dev package installed above provides it.
       - name: "Build: marble-device-support"
@@ -449,6 +449,28 @@ jobs:
 
           echo "wcn-prefixed links: $(echo "$LIST" | grep -c 'wcnh')"
           echo "firmware deb verified: $DEB"
+
+          # The generated ALSA graph must contain all three board backends;
+          # file existence alone also passes for the old speaker-only graph.
+          dpkg-deb --fsys-tarfile "$DEB" | tar -xOf - \
+            ./usr/lib/firmware/qcom/sm8450/SM8475-Xiaomi-Marble-tplg.bin \
+            > "$RUNNER_TEMP/marble-audio-topology.bin"
+          alsatplg -d "$RUNNER_TEMP/marble-audio-topology.bin" \
+            -o "$RUNNER_TEMP/marble-audio-topology.conf"
+          for backend in RX_CODEC_DMA_RX_0 TERTIARY_TDM_RX_0 TX_CODEC_DMA_TX_3; do
+            grep -q "$backend" "$RUNNER_TEMP/marble-audio-topology.conf" \
+              || { echo "FAIL: missing audio backend $backend"; exit 1; }
+          done
+
+      - name: Verify wired audio UCM
+        run: |
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/marble-device-support_*.deb | head -1)
+          dpkg-deb --fsys-tarfile "$DEB" | tar -xOf - \
+            ./usr/share/alsa/ucm2/Qualcomm/sm8450/xiaomi-marble/HiFi.conf \
+            > "$RUNNER_TEMP/marble-HiFi.conf"
+          grep -Fq 'SectionDevice."Headphones"' "$RUNNER_TEMP/marble-HiFi.conf"
+          grep -Fq 'SectionDevice."Headset"' "$RUNNER_TEMP/marble-HiFi.conf"
+          grep -Fq "RX_CODEC_DMA_RX_0 Audio Mixer MultiMedia2" "$RUNNER_TEMP/marble-HiFi.conf"
 
       # libssc is a build dependency of iio-sensor-proxy-ssc, so its contents
       # matter as much as its runtime behaviour: the headers and the pkg-config
