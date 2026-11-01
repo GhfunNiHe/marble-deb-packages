@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: marble-device-support
-Source: https://github.com/iLtanaka/marble-device-support
+Source: https://github.com/GhfunNiHe/marble-device-support
 
 Files: *
 Copyright: 2026 Tatsuki Tanaka <tatsuki@tanakatatsuki.dev>

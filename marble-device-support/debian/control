@@ -7,11 +7,11 @@ Build-Depends:
  gcc,
  make,
  pkg-config,
- libqmi-glib-dev,
+ libqmi-glib-dev (>= 1.39.1),
  libqrtr-glib-dev,
  libglib2.0-dev,
 Standards-Version: 4.6.2
-Homepage: https://github.com/iLtanaka/marble-device-support
+Homepage: https://github.com/GhfunNiHe/marble-device-support
 Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
 Rules-Requires-Root: no
 
@@ -59,4 +59,4 @@ Description: Hardware support layer for Xiaomi Poco F5 (marble)
  This package targets mainline Linux on marble (postmarketOS-style
  U-Boot + extlinux boot), not Android.
  .
- Upstream source: https://github.com/iLtanaka/marble-device-support
+ Upstream source: https://github.com/GhfunNiHe/marble-device-support

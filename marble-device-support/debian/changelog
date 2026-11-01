@@ -1,3 +1,17 @@
+marble-device-support (1.0.0-24) UNRELEASED; urgency=medium
+
+  * Add WCD9385 headphones and headset microphone UCM devices with real jack
+    controls, mutually exclusive speaker/headphone routes and conservative
+    headphone gain. Keep the capture frontend routed for PipeWire probing.
+  * Build from the GhfunNiHe fork, which owns UCM, IMS sources, runtime
+    helpers, service/drop-in files, udev/modprobe/APN and camera configuration.
+    Select WITH_IMS=1 and install-debian; remove duplicate runtime assets from
+    the Debian overlay and the obsolete helper-path substitutions.
+  * Requires the WCD RX0 DT link, the 2.75 V MBHC threshold fix and the matching
+    generated AudioReach playback graph.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Sun, 01 Nov 2026 02:00:00 +0800
+
 marble-device-support (1.0.0-23) unstable; urgency=medium
 
   * Ship libcamera tuning at

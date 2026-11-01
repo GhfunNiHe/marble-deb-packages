@@ -9,83 +9,14 @@ override_dh_strip_nondeterminism:
 # dpkg-shlibdeps unavailable on Fedora; Depends live in debian/control.
 override_dh_shlibdeps:
 
-	# IMS: the modem keeps IMS off until the AP enables it over QMI IMSS;
-	# 81voltd is the DCM/IMSD server, without both SMS/calls fail on CT.
+# Runtime sources and installation rules are owned by the support-layer fork.
 override_dh_auto_build:
-	dh_auto_build
-	$(CC) -O2 -Wall -Wextra \
-		$(shell pkg-config --cflags qmi-glib qrtr-glib gio-2.0 glib-2.0) \
-		-o marble-imsctl debian/marble-imsctl.c \
-		$(shell pkg-config --libs qmi-glib qrtr-glib gio-2.0 glib-2.0)
+	dh_auto_build -- WITH_IMS=1
 
 override_dh_auto_install:
-	$(MAKE) PREFIX=/usr DESTDIR=debian/marble-device-support install
-	# Upstream fix: units point at /usr/local/sbin, the Makefile installs *.sh
-	# under /usr/libexec -> 203/EXEC as shipped.
-	sed -i \
-		-e 's|^ExecStart=/usr/local/sbin/marble-compositor-boost$$|ExecStart=/usr/libexec/marble-compositor-boost.sh|' \
-		-e 's|^ExecStart=/usr/local/sbin/marble-panel-on$$|ExecStart=/usr/libexec/marble-panel-on.sh|' \
-		debian/marble-device-support/usr/lib/systemd/system/marble-compositor-boost.service \
-		debian/marble-device-support/usr/lib/systemd/system/marble-panel-on.service
-	# Debian ships one hexagonrpcd wrapper unit, not Alpine's per-DSP
-	# hexagonrpcd-sdsp: retarget the drop-in and its env-var paths.
-	install -Dm644 debian/hexagonrpcd.service.d/60-marble.conf \
-		debian/marble-device-support/usr/lib/systemd/system/hexagonrpcd.service.d/60-marble.conf
-	rm -rf debian/marble-device-support/usr/lib/systemd/system/hexagonrpcd-sdsp.service.d
-	sed -i \
-		-e 's|^Wants=hexagonrpcd-sdsp\.service$$|Wants=hexagonrpcd.service|' \
-		-e 's|^After=hexagonrpcd-sdsp\.service$$|After=hexagonrpcd.service|' \
-		debian/marble-device-support/usr/lib/systemd/system/iio-sensor-proxy.service.d/60-marble-sensors.conf
-	# SLPI recovery: stale hexagonrpcd/iio-sensor-proxy look active but
-	# return dead data; restart both when the FastRPC node reappears.
-	install -Dm644 debian/iio-sensor-proxy.service.d/70-marble-restart.conf \
-		debian/marble-device-support/usr/lib/systemd/system/iio-sensor-proxy.service.d/70-marble-restart.conf
-	# Factory MACs for both radios from persist; the firmware copy pairs with
-	# the ath11k wlan_mac.bin patch in linux-xiaomi-marble.
-	install -Dm755 debian/marble-helper \
-		debian/marble-device-support/usr/libexec/marble-helper
-	install -Dm644 debian/marble-mac-restore.service \
-		debian/marble-device-support/usr/lib/systemd/system/marble-mac-restore.service
-	# Mask bootmac (machine-id MAC): marble-mac-restore owns both addresses.
-	install -d debian/marble-device-support/etc/systemd/system
-	ln -sfn /dev/null \
-		debian/marble-device-support/etc/systemd/system/bootmac-bluetooth.service
-	install -Dm644 debian/wlan-mac.conf \
-		debian/marble-device-support/usr/lib/modprobe.d/marble-wlan.conf
-	# Accelerometer + proximity IIO tags for iio-sensor-proxy.
-	install -Dm644 debian/libssc-marble-sensors.rules \
-		debian/marble-device-support/usr/lib/udev/rules.d/82-libssc-marble-sensors.rules
-	# SLPI crashes do not recreate /dev/fastrpc-sdsp, so udev cannot trigger
-	# this; watch the kernel log instead.
-	install -Dm644 debian/marble-sensors-watch.service \
-		debian/marble-device-support/usr/lib/systemd/system/marble-sensors-watch.service
-	# China Telecom fallback APN, read-only under /usr/lib (NM >= 1.36);
-	# autoconnect stays off until nmcli con up ct-data.
-	install -d debian/marble-device-support/usr/lib/NetworkManager/system-connections
-	install -m 600 debian/network-manager/ct-data.nmconnection \
-		debian/marble-device-support/usr/lib/NetworkManager/system-connections/ct-data.nmconnection
-	# IMS/VoLTE helpers; requires 81voltd for the IMS PDN.
-	install -Dm755 marble-imsctl debian/marble-device-support/usr/libexec/marble-imsctl
-	install -Dm644 debian/marble-ims-enable.service \
-		debian/marble-device-support/usr/lib/systemd/system/marble-ims-enable.service
-	# Wait for boot_a/boot_b udev units before qbootctl marks the slot good.
-	install -Dm644 debian/qbootctl.service.d/wait-for-partitions.conf \
-		debian/marble-device-support/usr/lib/systemd/system/qbootctl.service.d/wait-for-partitions.conf
-	# qcom-modem-setup gives the SIM 1 s but this UIM needs ~10 s; the wrapper
-	# raises it to 30 s and the timer retries once.
-	install -Dm644 debian/qcom-modem-setup.service.d/10-marble-sim-wait.conf \
-		debian/marble-device-support/usr/lib/systemd/system/qcom-modem-setup.service.d/10-marble-sim-wait.conf
+	$(MAKE) WITH_IMS=1 PREFIX=/usr DESTDIR=debian/marble-device-support install-debian
 
-	# libcamera tuning for the IMX355: black level only, no CCM yet.
-	install -Dm644 debian/camera/imx355.yaml \
-		debian/marble-device-support/usr/share/libcamera/ipa/simple/imx355.yaml
-
-	install -Dm644 debian/marble-modem-recover.service \
-		debian/marble-device-support/usr/lib/systemd/system/marble-modem-recover.service
-	install -Dm644 debian/marble-modem-recover.timer \
-		debian/marble-device-support/usr/lib/systemd/system/marble-modem-recover.timer
-
-# dh_fixperms strips the 0600 NetworkManager requires (see 1.0.0-17).
+# dh_fixperms normalises mode 0600; NetworkManager rejects readable keyfiles.
 override_dh_fixperms:
 	dh_fixperms
 	chmod 600 debian/marble-device-support/usr/lib/NetworkManager/system-connections/ct-data.nmconnection

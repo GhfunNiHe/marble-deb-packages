@@ -1,3 +1,0 @@
-# marble: 80-iio-sensor-proxy.rules only tags light/compass, so accel and
-# proximity from the SLPI stay unclaimed; 82- appends with += after 80.
-SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-accel ssc-proximity"

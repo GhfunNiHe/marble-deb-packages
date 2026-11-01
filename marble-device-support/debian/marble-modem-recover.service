@@ -1,9 +1,0 @@
-[Unit]
-Description=marble: recover the modem when ModemManager gave up before the SIM was ready
-# Runs from the timer 25 s after boot; keep it out of the boot path.
-After=ModemManager.service
-Wants=ModemManager.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/libexec/marble-helper modem-recover
