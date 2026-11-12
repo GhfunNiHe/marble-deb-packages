@@ -1,3 +1,12 @@
+libssc (0.4.4-5) unstable; urgency=medium
+
+  * Add 0004-meson-custom-target-depends.patch: pass the generated Python
+    protobuf CustomTarget rather than its CustomTargetIndex in
+    ssc_server's depends. Meson 1.4.2 on the Ubuntu 24.04 baseline rejects
+    the index form during configure, which broke the build.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 13 Nov 2026 00:20:00 +0800
+
 libssc (0.4.4-4) unstable; urgency=medium
 
   * Restore 0002-libssc-light-four-element.patch and add

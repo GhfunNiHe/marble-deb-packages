@@ -1,0 +1,30 @@
+Description: pass CustomTarget objects in ssc_server depends
+ Meson 1.4.2 (Ubuntu 24.04) rejects CustomTargetIndex entries in
+ custom_target(depends:). python_gen stored protobuf_python_gen[0], and
+ depends: [python_gen] flattened to an array of CustomTargetIndex, so
+ libssc failed at configure time on the Ubuntu 24.04 build baseline.
+ .
+ Store the CustomTarget itself and pass the array directly.
+Origin: self
+Author: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+Forwarded: no
+--- a/mocking/ssc_server/meson.build
++++ b/mocking/ssc_server/meson.build
+@@ -47,7 +47,7 @@
+     install: true,
+     install_dir: [join_paths(python.get_install_dir(), 'ssc_server')]
+   )
+-  python_gen += protobuf_python_gen[0]
++  python_gen += [protobuf_python_gen]
+ endforeach
+ 
+ # Make the SSC Server available during tests
+@@ -57,7 +57,7 @@
+   output: ['qmi.py', 'ssc.py', 'ssc-server', 'ssc-server-tests'],
+   command: ['cp', '@INPUT@', '@OUTDIR@'],
+   build_by_default: true,
+-  depends: [python_gen]
++  depends: python_gen
+ )
+ 
+ subdir('data')
