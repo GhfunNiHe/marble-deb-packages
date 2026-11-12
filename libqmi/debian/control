@@ -5,10 +5,13 @@ Uploaders: Arnaud Ferraris <aferraris@debian.org>,
            Guido Günther <agx@sigxcpu.org>,
            Henry-Nicolas Tourneur <debian@nilux.be>,
            Martin <debacle@debian.org>
+# Ubuntu 24.04 still carries the GIR XML in libglib2.0-dev (glib 2.80);
+# newer distributions split it into gir1.2-*-2.0-dev. Keep the real
+# dependencies but allow the pre-split package as the alternative.
 Build-Depends: debhelper-compat (= 13),
                bash-completion,
-               gir1.2-gio-2.0-dev,
-               gir1.2-gobject-2.0-dev,
+               gir1.2-gio-2.0-dev | libglib2.0-dev (<< 2.82),
+               gir1.2-gobject-2.0-dev | libglib2.0-dev (<< 2.82),
                gobject-introspection (>= 1.80),
                gi-docgen <!nodoc>,
                help2man,

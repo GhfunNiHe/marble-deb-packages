@@ -1,0 +1,11 @@
+libmbim (1.32.0-0marble1) unstable; urgency=medium
+
+  * Build libmbim 1.32.0 from upstream for the Ubuntu 24.04 build baseline.
+    Noble ships 1.31.2, which is below the libmbim-glib >= 1.32 required by
+    modemmanager-marble; Debian trixie/forky/sid already provide a new enough
+    archive package and skip this local copy at rootfs install time.
+  * Disable introspection, man pages and bash completion: this package exists
+    to provide the runtime library and the headers/pkg-config file consumed by
+    ModemManager, not to replace the distribution's full libmbim packaging.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Tue, 10 Nov 2026 00:00:00 +0800

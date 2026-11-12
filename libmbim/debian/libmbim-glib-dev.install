@@ -1,0 +1,3 @@
+usr/include/*
+usr/lib/*/libmbim-glib.so
+usr/lib/*/pkgconfig/*

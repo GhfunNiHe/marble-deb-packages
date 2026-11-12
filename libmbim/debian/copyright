@@ -1,0 +1,17 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: libmbim
+Upstream-Contact: Iñigo Martínez <inigomartinez@gmail.com>
+Source: https://gitlab.freedesktop.org/mobile-broadband/libmbim
+
+Files: *
+Copyright: 2013-2021 libmbim contributors
+License: LGPL-2.1-or-later
+ This library is free software; you can redistribute it and/or modify it
+ under the terms of the GNU Lesser General Public License as published by the
+ Free Software Foundation; either version 2.1 of the License, or (at your
+ option) any later version.
+
+Files: debian/*
+Copyright: 2026 GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+License: LGPL-2.1-or-later
+ See above.

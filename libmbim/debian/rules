@@ -1,0 +1,15 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --buildsystem=meson
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-Dintrospection=false \
+		-Dgtk_doc=false \
+		-Dman=false \
+		-Dbash_completion=false
+
+# Upstream's test suite needs its own mock and Python scaffolding; none of it
+# is shipped or required to build the library.
+override_dh_auto_test:

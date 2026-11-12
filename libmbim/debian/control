@@ -1,0 +1,58 @@
+Source: libmbim
+Section: libs
+Priority: optional
+Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ meson (>= 0.53),
+ ninja-build,
+ pkg-config,
+ libglib2.0-dev,
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://www.freedesktop.org/wiki/Software/libmbim
+Vcs-Git: https://github.com/GhfunNiHe/marble-deb-packages.git
+
+# Ubuntu 24.04 ships libmbim 1.31.2, but modemmanager-marble needs
+# libmbim-glib >= 1.32. This package is the independently built 1.32.0
+# backport used by the Ubuntu build baseline. Debian trixie already has
+# 1.32.0 and forky/sid have 1.34.0, so rootfs installation skips these local
+# packages when the target archive is new enough.
+
+Package: libmbim-glib4
+Architecture: arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: libmbim-proxy
+Description: Support library for the Mobile Broadband Interface Model protocol
+ MBIM is the protocol used by Qualcomm and other cellular modems for control
+ and data-plane management. This package ships libmbim-glib, the GLib-based
+ client library used by ModemManager.
+
+Package: libmbim-glib-dev
+Section: libdevel
+Architecture: arm64
+Depends:
+ libmbim-glib4 (= ${binary:Version}),
+ libglib2.0-dev,
+ ${misc:Depends},
+Description: Development files for libmbim-glib
+ Headers and pkg-config file for building applications against libmbim-glib.
+ This is a build dependency of modemmanager-marble.
+
+Package: libmbim-utils
+Section: net
+Architecture: arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: User space utilities for the Mobile Broadband Interface Model
+ Command line utilities for talking to MBIM modems, including mbimcli.
+
+Package: libmbim-proxy
+Section: net
+Architecture: arm64
+Depends:
+ libmbim-glib4 (= ${binary:Version}),
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: Proxy to communicate with MBIM ports
+ The mbim-proxy daemon allows multiple clients to share one MBIM port. It is
+ started by libmbim-glib when needed.

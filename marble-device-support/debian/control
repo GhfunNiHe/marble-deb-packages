@@ -17,20 +17,18 @@ Rules-Requires-Root: no
 
 Package: marble-device-support
 Architecture: arm64
-# No ${shlibs:Depends}: dpkg-shlibdeps cannot run on the Fedora build host
-# (no dpkg library metadata). marble-touchboost needs at most GLIBC_2.34
-# (verified with objdump -T), so libc6 (>= 2.34) covers Debian bookworm/trixie.
-Depends: ${misc:Depends},
+# dpkg-shlibdeps runs on the Ubuntu 24.04 build baseline, so the real library
+# floors (glibc, GLib, libqmi, libqrtr, libgcc) come from the built binaries
+# instead of hand-maintained guesses. The non-library dependencies remain
+# explicit because they are data/service assets, not ELF dependencies.
+Depends: ${shlibs:Depends},
+ ${misc:Depends},
  alsa-ucm-conf,
  bluez,
  util-linux (>= 2.34),
  qbootctl,
  qcom-phone-utils,
  modemmanager,
- libc6 (>= 2.34),
- libglib2.0-0t64 | libglib2.0-0,
- libqmi-glib5,
- libqrtr-glib0,
 Recommends: 81voltd,
 Description: Hardware support layer for Xiaomi Poco F5 (marble)
  Distribution-agnostic hardware support layer for the Xiaomi Poco F5 /

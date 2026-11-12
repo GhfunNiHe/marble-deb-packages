@@ -3,11 +3,8 @@
 %:
 	dh $@
 
-# Fedora build host: no strip-nondeterminism, nothing to normalise.
+# Keep upstream assets byte-for-byte; there is nothing to normalise.
 override_dh_strip_nondeterminism:
-
-# dpkg-shlibdeps unavailable on Fedora; Depends live in debian/control.
-override_dh_shlibdeps:
 
 # Runtime sources and installation rules are owned by the support-layer fork.
 override_dh_auto_build:
