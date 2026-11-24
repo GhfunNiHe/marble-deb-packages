@@ -1,0 +1,19 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --buildsystem=meson
+
+# Upstream's tests build standalone helpers and are not needed for the
+# daemon/shared-library packages.
+override_dh_auto_test:
+
+# Only the versioned soname is part of the runtime package. The unversioned
+# .so symlink exists for development and would otherwise trip dh_missing.
+override_dh_auto_install:
+	dh_auto_install
+	find debian/tmp/usr/lib -name 'libhexagonrpc.so' -delete
+
+# hexagonrpcd and chrecd link against the library built in this same source
+# tree; point dpkg-shlibdeps at the staged libhexagonrpc package explicitly.
+override_dh_shlibdeps:
+	dh_shlibdeps -l$(CURDIR)/debian/libhexagonrpc0.4/usr/lib/$(DEB_HOST_MULTIARCH)

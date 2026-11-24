@@ -1,0 +1,44 @@
+Source: hexagonrpc
+Section: otherosfs
+Priority: optional
+Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ meson (>= 1.1),
+ ninja-build,
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://github.com/linux-msm/hexagonrpc
+Vcs-Git: https://github.com/GhfunNiHe/marble-deb-packages.git
+
+Package: hexagonrpcd
+Architecture: arm64
+Multi-Arch: foreign
+Depends:
+ adduser,
+ udev,
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: Daemon to communicate with Qualcomm DSPs
+ Qualcomm processors include Digital Signal Processors (DSP) which can be
+ accessed from Linux using the FastRPC protocol. This protocol is used to
+ serve remote files to the DSPs and to call functions offloaded to them.
+ .
+ This package contains hexagonrpcd, the daemon that talks to the Context Hub
+ Runtime Environment (the DSP program managing sensors) over FastRPC. It is
+ the userspace half of the Qualcomm Sensor Core (SSC) stack used by libssc
+ and iio-sensor-proxy-ssc on marble.
+
+Package: libhexagonrpc0.4
+Section: libs
+Architecture: arm64
+Multi-Arch: same
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: Implementation of the FastRPC protocol -- shared library
+ Qualcomm processors include Digital Signal Processors (DSP) which can be
+ accessed from Linux using the FastRPC protocol.
+ .
+ This package contains the shared library implementing the FastRPC
+ protocol for hexagonrpcd.

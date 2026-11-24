@@ -1,0 +1,1 @@
+usr/lib/${DEB_HOST_MULTIARCH}/libhexagonrpc.so.* /usr/lib/${DEB_HOST_MULTIARCH}/

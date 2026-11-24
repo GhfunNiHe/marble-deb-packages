@@ -1,0 +1,3 @@
+usr/bin/hexagonrpcd usr/libexec/hexagonrpc
+usr/libexec/hexagonrpc/chrecd usr/libexec/hexagonrpc
+debian/bin/hexagonrpcd usr/bin

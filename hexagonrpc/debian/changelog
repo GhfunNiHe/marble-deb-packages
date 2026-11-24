@@ -1,0 +1,15 @@
+hexagonrpc (0.4.0-0marble1) unstable; urgency=medium
+
+  * Independently build upstream hexagonrpc 0.4.0 for the Ubuntu 24.04
+    device-package baseline. Ubuntu noble does not package hexagonrpcd,
+    which leaves the SSC sensor stack (libssc + iio-sensor-proxy-ssc)
+    without its FastRPC daemon. Debian trixie/forky/sid and Ubuntu
+    resolute/stonking already provide an archive package, so the rootfs
+    installer keeps the distribution copy there and uses this one only
+    where the archive has no candidate.
+  * Ship the Debian-compatible hexagonrpcd wrapper, systemd service, udev
+    rule and the real daemon under /usr/libexec/hexagonrpc. The wrapper
+    keeps the hexagonrpcd_device/_dsp/_fw_dir overrides used by
+    marble-device-support.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 13 Nov 2026 00:40:00 +0800

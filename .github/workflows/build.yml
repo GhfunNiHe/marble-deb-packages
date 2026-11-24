@@ -21,6 +21,8 @@ env:
   SRC_LIBSSC_REF: ${{ inputs.libssc_src_ref }}              # empty = v<changelog version>
   SRC_IIO_REPO: ${{ inputs.iio_src_repo || 'https://gitlab.freedesktop.org/hadess/iio-sensor-proxy' }}
   SRC_IIO_REF: ${{ inputs.iio_src_ref }}                    # empty = <changelog version>
+  SRC_HEXAGONRPC_REPO: ${{ inputs.hexagonrpc_src_repo || 'https://github.com/linux-msm/hexagonrpc' }}
+  SRC_HEXAGONRPC_REF: ${{ inputs.hexagonrpc_src_ref || 'v0.4.0' }} # Noble sensor backport
   SRC_LIBVA_REPO: ${{ inputs.libva_src_repo || 'https://github.com/FFT-infra/qualcomm-iris-vaapi' }}
   SRC_LIBVA_REF: ${{ inputs.libva_src_ref || 'feat/encode-entrypoints' }}  # empty = feat/encode-entrypoints
   SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/GhfunNiHe/linux-marble' }}
@@ -39,6 +41,7 @@ on:
       - 'libmbim/**'
       - 'modemmanager/**'
       - 'iio-sensor-proxy-ssc/**'
+      - 'hexagonrpc/**'
       - 'libva-v4l2/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
@@ -102,6 +105,14 @@ on:
         description: 'iio-sensor-proxy 的 tag/分支/提交（留空 = <debian/changelog 版本>）'
         type: string
         default: ''
+      hexagonrpc_src_repo:
+        description: 'hexagonrpc 源码仓库地址 (repo URL)'
+        type: string
+        default: 'https://github.com/linux-msm/hexagonrpc'
+      hexagonrpc_src_ref:
+        description: 'hexagonrpc 的 tag/分支/提交（Noble 回移植默认 v0.4.0）'
+        type: string
+        default: 'v0.4.0'
       libva_src_repo:
         description: 'libva-v4l2 源码仓库地址 (repo URL)'
         type: string
@@ -252,6 +263,7 @@ jobs:
             echo "SRC_MODEMMANAGER_URL=$(src_url "$SRC_MODEMMANAGER_REPO" "${SRC_MODEMMANAGER_REF:-$(cat modemmanager/COMMIT)}")"
             echo "SRC_LIBSSC_URL=$(src_url "$SRC_LIBSSC_REPO" "${SRC_LIBSSC_REF:-v$LSVER}")"
             echo "SRC_IIO_URL=$(src_url "$SRC_IIO_REPO" "${SRC_IIO_REF:-$IIOVER}")"
+            echo "SRC_HEXAGONRPC_URL=$(src_url "$SRC_HEXAGONRPC_REPO" "${SRC_HEXAGONRPC_REF:-v0.4.0}")"
             echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-feat/encode-entrypoints}")"
             echo "SRC_KERNEL_URL=$(src_url "$SRC_KERNEL_REPO" "${SRC_KERNEL_REF:-marble-7.2}")"
           } >> "$GITHUB_ENV"
@@ -392,6 +404,23 @@ jobs:
           cd "$RUNNER_TEMP/build/iio"
           dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
+
+      # hexagonrpc: Ubuntu noble has no hexagonrpcd package, so the SSC
+      # sensor stack (libssc + iio-sensor-proxy-ssc) has no FastRPC daemon.
+      # Debian trixie/forky/sid and Ubuntu resolute/stonking already provide
+      # it; the rootfs installer skips this local copy when an archive
+      # candidate exists.
+      - name: "Build: hexagonrpc"
+        run: |
+          wget -c -q -O "$RUNNER_TEMP/build/hexagonrpc.tar.gz" "$SRC_HEXAGONRPC_URL"
+          mkdir -p "$RUNNER_TEMP/build/hexagonrpc"
+          tar -xf "$RUNNER_TEMP/build/hexagonrpc.tar.gz" -C "$RUNNER_TEMP/build/hexagonrpc" --strip-components=1
+          cp -a "$GITHUB_WORKSPACE/hexagonrpc/debian" "$RUNNER_TEMP/build/hexagonrpc/debian"
+          cd "$RUNNER_TEMP/build/hexagonrpc"
+          dpkg-buildpackage -b -us -uc
+          cp "$RUNNER_TEMP/build"/hexagonrpcd_*.deb \
+             "$RUNNER_TEMP/build"/libhexagonrpc0.4_*.deb \
+             "$GITHUB_WORKSPACE/out/"
 
       # libva-v4l2: VA-API backend for Iris, not in Debian. FFT-infra fork
       # (Direct/Import/Copy publish policies); pairs with the iris decode-order
@@ -647,8 +676,17 @@ jobs:
             libmbim-proxy \
             libssc \
             iio-sensor-proxy-ssc \
+            hexagonrpcd \
+            libhexagonrpc0.4 \
             libva-v4l2; do
-            if ! compgen -G "out/${p}_*.deb" >/dev/null; then
+            found=
+            for deb in out/${p}_*.deb; do
+              if [ -e "$deb" ]; then
+                found=1
+                break
+              fi
+            done
+            if [ -z "$found" ]; then
               echo "FAIL: required package was not built: $p"
               missing=1
             fi
