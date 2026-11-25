@@ -39,5 +39,5 @@ Description: Linux kernel for Xiaomi Redmi Note 12 Turbo (marble)
  upgrades; an upgrade with no boot entry fails before the kernel and DTB are
  replaced.
  .
- Local deviations from the author's reference config: CONFIG_LTO_CLANG_THIN=y
- and CONFIG_NTSYNC=m.
+ Local deviations from the author's reference config live in the kconfig
+ fragment extra-kernel.config, merged on top at build time.

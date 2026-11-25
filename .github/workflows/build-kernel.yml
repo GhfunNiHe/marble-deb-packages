@@ -130,6 +130,7 @@ jobs:
         run: |
           cp -a linux-xiaomi-marble/debian "$KSRC/debian"
           cp linux-xiaomi-marble/config-xiaomi-marble.aarch64 "$KSRC/"
+          cp linux-xiaomi-marble/extra-kernel.config "$KSRC/"
 
       - name: Build kernel
         run: |

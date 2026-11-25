@@ -439,30 +439,24 @@ jobs:
       - name: "Build: linux-xiaomi-marble"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/linux-marble.tar.gz" "$SRC_KERNEL_URL"
-          # The tarball's top-level directory is <repo>-<ref>, so it changes
-          # name with a source parameter; untar into a wrapper dir and find it
-          # instead of assuming "linux-marble-main".
+          # Top-level dir is <repo>-<ref>: find it instead of assuming a name.
           mkdir -p "$RUNNER_TEMP/build/kernel-src"
           tar -xf "$RUNNER_TEMP/build/linux-marble.tar.gz" -C "$RUNNER_TEMP/build/kernel-src"
           SRC=$(find "$RUNNER_TEMP/build/kernel-src" -mindepth 1 -maxdepth 1 -type d | head -1)
           [ -n "$SRC" ] || { echo "FAIL: kernel tarball has no top-level directory"; exit 1; }
           cp -a linux-xiaomi-marble/debian "$SRC/debian"
           cp linux-xiaomi-marble/config-xiaomi-marble.aarch64 "$SRC/"
+          cp linux-xiaomi-marble/extra-kernel.config "$SRC/"
 
           cd "$SRC"
-          # The tree already carries our patches (see SRC_KERNEL_REF), so
-          # debian/patches is gone and debian/rules only syncs the config.
-          # ath11k MAC pairs with marble-mac-restore, iris decode-order with
-          # libva-v4l2.
+          # The tree carries our patches; debian/rules only syncs and merges the config.
           dpkg-buildpackage -b -us -uc
           echo "=== ccache stats ==="
           ccache --show-stats
 
           KREL=$(cat include/config/kernel.release)
           echo "KREL=$KREL" >> "$GITHUB_ENV"
-          # dpkg-buildpackage drops the .deb next to the source tree, i.e. in
-          # the wrapper dir, not in $RUNNER_TEMP/build (same reason the
-          # firmware step copies from $SRC/..).
+          # The .deb lands in the wrapper dir, not in $RUNNER_TEMP/build.
           cp "$SRC"/../*.deb "$GITHUB_WORKSPACE/out/"
           {
             echo "### Kernel build result"
