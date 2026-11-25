@@ -3,11 +3,7 @@
 %:
 	dh $@ --buildsystem=meson
 
-# Upstream's test suite drives the library against its own Python mock QRTR
-# server (mocking/ssc-server) and the generated protobuf Python bindings, so it
-# needs python3-protobuf/python3-gi. None of that is part of the shipped
-# library, so skip the tests instead of growing Build-Depends with test-only
-# scaffolding.
+# Upstream's tests need a Python mock QRTR server and protobuf; skip them instead of adding test Build-Depends.
 override_dh_auto_test:
 
 override_dh_auto_configure:

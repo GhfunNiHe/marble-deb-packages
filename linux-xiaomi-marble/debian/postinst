@@ -1,17 +1,5 @@
 #!/bin/sh
-# postinst for linux-xiaomi-marble (no-initramfs direct-boot route, same as
-# the original project's verified path: alt.conf has no initrd line):
-#   1. verify that /boot/efi is vfat and identifies as ESP by either
-#      PARTLABEL=esp or filesystem LABEL=ESP. The latter also covers the
-#      partitionless rootfs loop image, which cannot have a PARTLABEL.
-#   2. fail an upgrade if its boot entry is missing
-#   3. depmod for the new kernel (modules live in /usr/lib/modules/<ver>,
-#      loaded by udev/systemd after the rootfs mounts)
-#   4. ESP sync: uncompressed Image -> /marble/vmlinuz and DTB -> /marble/...
-#   5. Only an initial installation creates /extlinux/extlinux.conf; upgrades
-#      leave the existing boot entry untouched.
-#   A missing, unmounted or unexpected ESP is a configuration error: fail with
-#   a recovery hint instead of writing boot files to the wrong filesystem.
+# no-initramfs direct boot: check the ESP, depmod, sync vmlinuz + DTB, keep extlinux.conf on upgrades.
 set -e
 
 # Kernel release: authoritative source is the installed marker file,
@@ -76,24 +64,15 @@ case "$1" in
 
 		# 4. Sync the kernel and DTB on both installation and upgrade.
 		mkdir -p /boot/efi/marble
-		# /boot/vmlinuz-<ver> IS the uncompressed arm64 Image (U-Boot
-		# booti requirement), just renamed on the ESP like the original
-		# project's manual step.
+		# vmlinuz-<ver> is the uncompressed Image, renamed on the ESP as the original project does.
 		cp /boot/vmlinuz-"$KREL" /boot/efi/marble/vmlinuz
 		cp /boot/sm8475-xiaomi-marble-"$KREL".dtb /boot/efi/marble/sm8475-xiaomi-marble.dtb
 
 		if [ -z "$2" ]; then
-			# Initial installation only. $2 is the previously configured
-			# version on upgrades, so never overwrite an existing boot entry
-			# after the user may have edited it.
+			# Initial installation only: never overwrite an entry the user may have edited.
 			mkdir -p /boot/efi/extlinux
 
-			# root= is NOT hardcoded. The source of truth is the "/" entry of
-			# /etc/fstab, which is where the rootfs build (and the user) decides
-			# which partition to boot from; PARTLABEL=/UUID=/LABEL=/dev/... are
-			# all valid kernel root= values, so the fstab source field is passed
-			# through verbatim. Falls back to whatever the ESP already carries,
-			# then to the established default.
+			# root= comes from the / entry of /etc/fstab, verbatim, then the ESP's own, then the default.
 			ROOT_SPEC=$(awk '!/^#/ && $2 == "/" { print $1; exit }' /etc/fstab 2>/dev/null || true)
 			if [ -z "$ROOT_SPEC" ] && [ -f /boot/efi/extlinux/extlinux.conf ]; then
 				ROOT_SPEC=$(sed -n 's/.*[[:space:]]root=\([^ ]*\).*/\1/p' \

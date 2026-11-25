@@ -33,9 +33,7 @@ if __name__ == "__main__":
     assert destination.resolve() not in (original.resolve(), fragment.resolve())
     base = original.read_text()
     if base.startswith("SectionManifest.manifest.data.0 'manifest:data0'\n"):
-        # alsatplg 1.2.16 emits a dangling compound for an empty manifest,
-        # nesting the next widget's data under it. Prove the binary manifest
-        # has no private data before removing that decoder artifact.
+        # alsatplg 1.2.16 nests data under an empty manifest: prove the binary has no private data.
         binary = pathlib.Path(sys.argv[4]).read_bytes()
         header = struct.unpack_from("<9I", binary)
         assert header[0] == 0x41536f43 and header[3] == 8

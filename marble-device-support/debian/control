@@ -17,10 +17,7 @@ Rules-Requires-Root: no
 
 Package: marble-device-support
 Architecture: arm64
-# dpkg-shlibdeps runs on the Ubuntu 24.04 build baseline, so the real library
-# floors (glibc, GLib, libqmi, libqrtr, libgcc) come from the built binaries
-# instead of hand-maintained guesses. The non-library dependencies remain
-# explicit because they are data/service assets, not ELF dependencies.
+# Library floors come from dpkg-shlibdeps on the build baseline; data/service deps stay explicit.
 Depends: ${shlibs:Depends},
  ${misc:Depends},
  alsa-ucm-conf,

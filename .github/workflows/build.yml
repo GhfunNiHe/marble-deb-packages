@@ -1,8 +1,6 @@
 name: Build Marble Deb Packages
 
-# Each package dir is overlaid onto a fresh upstream checkout; there is no
-# build script. The kernel builds in build-kernel-deb.yml (manual only) and
-# ships vmlinuz + DTB with no initramfs.
+# Each package dir is overlaid onto a fresh upstream checkout; the kernel builds in build-kernel.yml.
 
 # Source parameters: overridable per run via workflow_dispatch. Empty refs
 # fall back to the changelog version or <pkg>/COMMIT; keep them in sync.
@@ -46,9 +44,7 @@ on:
       - '.github/workflows/build.yml'
   workflow_dispatch:
     inputs:
-      # 源码地址参数：默认值就是本仓库当前构建的版本（changelog tag / COMMIT）。
-      # workflow_dispatch 的 default 不能引用表达式，所以版本号需要与
-      # debian/changelog、<pkg>/COMMIT 手动保持一致。
+      # 版本号与 debian/changelog、<pkg>/COMMIT 手动保持一致（default 不支持表达式）。
       firmware_src_repo:
         description: 'firmware-xiaomi-marble 源码仓库地址 (repo URL)'
         type: string
@@ -147,11 +143,7 @@ jobs:
       CCACHE_MAXSIZE: 4G
 
     steps:
-      # Union of every package's Build-Depends. libqmi-glib-dev is excluded:
-      # the step below installs 1.39.1 first, and Ubuntu noble's 1.35.2 would
-      # otherwise pin libqmi-proxy to libqmi-glib5 (= 1.35.2-0ubuntu2).
-      # meson is not installed here: noble only has 1.3.2 and libssc requires
-      # >= 1.4.0, so the next step installs an independently built 1.4.2.
+      # Union of the packages' Build-Depends; libqmi-glib-dev and meson come from the next step.
       - name: Install build tools
         run: |
           apt-get update
@@ -170,9 +162,7 @@ jobs:
             python3-dbus python3-dev python3-gi libglib2.0-doc \
             libva-dev libdrm-dev libegl-dev libgles-dev libgbm-dev
 
-      # Ubuntu 24.04 ships meson 1.3.2 but libssc declares meson >= 1.4.0.
-      # Build the upstream 1.4.2 release into a small, dpkg-registered package
-      # so dpkg-checkbuilddeps sees a genuinely satisfied Build-Depends.
+      # noble has meson 1.3.2, libssc needs >= 1.4.0: build 1.4.2 as a dpkg-registered package.
       - name: Bootstrap meson 1.4.2 (noble has 1.3.2)
         run: |
           if command -v meson >/dev/null 2>&1 \
@@ -214,9 +204,7 @@ jobs:
       - name: Setup work dirs
         run: |
           mkdir -p "$RUNNER_TEMP/build" "$GITHUB_WORKSPACE/out"
-          # One ccache directory for every compile in the job: $HOME/.ccache,
-          # which is also what linux-xiaomi-marble/debian/rules defaults to
-          # (${CCACHE_DIR:-$HOME/.ccache}) and what is cached below.
+          # One ccache dir for the whole job, the same default debian/rules uses.
           mkdir -p "$HOME/.ccache"
           echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
 
@@ -229,9 +217,7 @@ jobs:
             echo "::warning::/usr/lib/ccache is missing; the meson packages will compile uncached"
           fi
 
-      # Save is a separate always-on step: save-always is deprecated and a
-      # combined cache discards the output of failed runs. Keys carry run_id
-      # because a cache entry can never be overwritten.
+      # Separate always-on save: save-always is deprecated, keys carry run_id.
       - name: Restore ccache
         uses: actions/cache/restore@v6
         with:
@@ -272,10 +258,7 @@ jobs:
           # each package is going to be fetched from.
           grep '^SRC_.*_URL=' "$GITHUB_ENV" | sort
 
-      # firmware: overlay debian/ onto the upstream *tag* snapshot. The tag
-      # comes from debian/changelog so there is a single version source.
-      # Upstream owns the blobs; debian/rules owns the install layout and
-      # the wcn-prefixed Bluetooth links btqca asks for on WCN6855.
+      # firmware: overlay debian/ onto the upstream tag snapshot.
       - name: "Build: firmware-xiaomi-marble"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/firmware.tar.gz" "$SRC_FIRMWARE_URL"
@@ -287,17 +270,10 @@ jobs:
           cp -a firmware-xiaomi-marble/debian "$SRC/debian"
           cd "$SRC"
           dpkg-buildpackage -b -us -uc
-          # dpkg-buildpackage drops the .deb one level up from $SRC, i.e. in
-          # $RUNNER_TEMP/build/fw/ — NOT $RUNNER_TEMP/build/ — because we untar
-          # the firmware tarball into that wrapper dir. Copy from there, or the
-          # firmware deb never reaches out/ and Verify firmware DEB fails.
+          # The .deb lands one level up, in $RUNNER_TEMP/build/fw/, not in build/.
           cp "$SRC"/../*.deb "$GITHUB_WORKSPACE/out/"
 
-      # libmbim: Ubuntu 24.04 ships 1.31.2, but modemmanager-marble requires
-      # libmbim-glib >= 1.32. Build the upstream 1.32.0 release as an
-      # independently packaged backport. Debian trixie already ships 1.32.0
-      # and forky/sid ship 1.34.0, so rootfs installs skip this local copy
-      # there and use the distribution's package.
+      # libmbim: backport 1.32.0, noble ships 1.31.2.
       - name: "Build: libmbim"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/libmbim.tar.gz" "$SRC_LIBMBIM_URL"
@@ -310,9 +286,7 @@ jobs:
                   "$RUNNER_TEMP/build"/libmbim-utils_*.deb "$RUNNER_TEMP/build"/libmbim-proxy_*.deb
           cp "$RUNNER_TEMP/build"/libmbim-*.deb "$GITHUB_WORKSPACE/out/"
 
-      # libqmi: pinned git master. GPS needs the QMI_LOC client-ID TLVs
-      # (MR !470) absent from noble's 1.35.2; ModemManager needs
-      # libqmi-glib >= 1.37.95, and the whole set must stay at 1.39.1.
+      # libqmi: pin 1.39.1 for the QMI_LOC TLVs and ModemManager's >= 1.37.95.
       - name: "Build: libqmi"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/libqmi.tar.gz" "$SRC_LIBQMI_URL"
@@ -325,16 +299,10 @@ jobs:
                   "$RUNNER_TEMP/build"/gir1.2-qmi-1.0_*.deb "$RUNNER_TEMP/build"/libqmi-proxy_*.deb
           cp "$RUNNER_TEMP/build"/libqmi-*.deb "$RUNNER_TEMP/build"/gir1.2-qmi-*.deb "$GITHUB_WORKSPACE/out/" || true
 
-      # marble-device-support: overlay debian/ onto the upstream checkout.
-      # Runs after libqmi on purpose: marble-imsctl (the IMS / SMS-over-IMS
-      # enablement tool the package builds from src/marble-imsctl.c) needs
-      # qmi-glib >= 1.39.1 for the IMSA bind and the IMSS "services enabled"
-      # message, and only the 1.39.1 dev package installed above provides it.
+      # marble-device-support: after libqmi, marble-imsctl needs libqmi 1.39.1.
       - name: "Build: marble-device-support"
         run: |
-          # A ref is only used when one was filled in: --branch takes a branch
-          # or a tag name, and with no ref the clone follows upstream's default
-          # branch, which is what this package has always built from.
+          # Empty ref follows upstream's default branch.
           if [ -n "$SRC_DEVSUPPORT_REF" ]; then
             git clone --depth 1 --branch "$SRC_DEVSUPPORT_REF" \
               "$SRC_DEVSUPPORT_REPO" "$RUNNER_TEMP/build/marble-device-support"
@@ -347,31 +315,21 @@ jobs:
           dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
 
-      # modemmanager: git master, pinned to the commit the AFW-unlock and
-      # Position-Report patches were authored against. Stock Debian MM
-      # (1.24.2) fails '--location-enable-gps-nmea' with QMI error 46 on
-      # this modem: the GNSS engine refuses non-framework clients. Tests
-      # are skipped (dev snapshot, one flaky test) via DEB_BUILD_OPTIONS.
+      # modemmanager: master, pinned to the AFW-unlock / Position-Report commits.
       - name: "Build: modemmanager"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/mm.tar.gz" "$SRC_MODEMMANAGER_URL"
           mkdir -p "$RUNNER_TEMP/build/mm"
           tar -xf "$RUNNER_TEMP/build/mm.tar.gz" -C "$RUNNER_TEMP/build/mm" --strip-components=1
           cd "$RUNNER_TEMP/build/mm"
-          # debian/source/format is 3.0 (quilt), so the patches in
-          # debian/patches/{,series} below are applied by
-          # 'dpkg-source --before-build' inside dpkg-buildpackage - no manual
-          # 'patch -p1' here.
+          # 3.0 (quilt): dpkg-source applies debian/patches inside dpkg-buildpackage.
           cp -a "$GITHUB_WORKSPACE/modemmanager/debian" debian
           DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/modemmanager-marble_*.deb "$RUNNER_TEMP/build"/libmm-glib0_*.deb \
              "$RUNNER_TEMP/build"/libmm-glib-dev_*.deb "$RUNNER_TEMP/build"/gir1.2-modemmanager-*.deb \
              "$GITHUB_WORKSPACE/out/"
 
-      # libssc: overlay debian/ onto the upstream codeberg *tag* snapshot. The
-      # tag comes from debian/changelog so there is a single version source.
-      # Debian and Ubuntu do not package libssc, which is the only reason
-      # their iio-sensor-proxy cannot have Qualcomm SSC support.
+      # libssc: overlay debian/ onto the upstream tag snapshot.
       - name: "Build: libssc"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/libssc.tar.gz" "$SRC_LIBSSC_URL"
@@ -383,17 +341,13 @@ jobs:
           dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
 
-      # iio-sensor-proxy needs libssc's headers and pkg-config file, so the
-      # package that was just built is installed into the container before
-      # this step (this is also what satisfies its Build-Depends).
+      # iio-sensor-proxy needs libssc's headers and pkg-config from the step above.
       - name: "Install libssc (build dependency of iio-sensor-proxy-ssc)"
         run: |
           apt-get install -y "$GITHUB_WORKSPACE"/out/libssc_*.deb
           pkg-config --modversion libssc
 
-      # iio-sensor-proxy-ssc: stock upstream 3.9, built with SSC support on.
-      # Named -ssc and declared as a replacement for iio-sensor-proxy, because
-      # the archive build has no libssc to link against.
+      # iio-sensor-proxy-ssc: upstream 3.9 with SSC support, replaces iio-sensor-proxy.
       - name: "Build: iio-sensor-proxy-ssc"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/iio.tar.gz" "$SRC_IIO_URL"
@@ -405,11 +359,7 @@ jobs:
           dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
 
-      # hexagonrpc: Ubuntu noble has no hexagonrpcd package, so the SSC
-      # sensor stack (libssc + iio-sensor-proxy-ssc) has no FastRPC daemon.
-      # Debian trixie/forky/sid and Ubuntu resolute/stonking already provide
-      # it; the rootfs installer skips this local copy when an archive
-      # candidate exists.
+      # hexagonrpc: noble has no hexagonrpcd for the SSC stack.
       - name: "Build: hexagonrpc"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/hexagonrpc.tar.gz" "$SRC_HEXAGONRPC_URL"
@@ -422,9 +372,7 @@ jobs:
              "$RUNNER_TEMP/build"/libhexagonrpc0.4_*.deb \
              "$GITHUB_WORKSPACE/out/"
 
-      # libva-v4l2: VA-API backend for Iris, not in Debian. FFT-infra fork
-      # (Direct/Import/Copy publish policies); pairs with the iris decode-order
-      # patch and degrades without it; debian/rules adds msm_drv_video.so.
+      # libva-v4l2: Iris VA-API backend from the FFT-infra fork.
       - name: "Build: libva-v4l2"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/libva-v4l2.tar.gz" "$SRC_LIBVA_URL"
@@ -465,19 +413,14 @@ jobs:
             echo "- modules: $(find "$GITHUB_WORKSPACE/out" -name '*.deb' -exec dpkg-deb -c {} \; | grep -c 'ko\.zst')"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Verify the DEB rather than trusting "the build succeeded"
-      # /boot must contain exactly the two files the boot chain reads, and
-      # vmlinuz must be the uncompressed arm64 Image (U-Boot booti cannot
-      # load a gzip/zstd image). Catches regressions in debian/rules.
+      # Assert on the DEB: two boot files, vmlinuz uncompressed.
       - name: Verify kernel DEB
         run: |
           DEB=$(ls "$GITHUB_WORKSPACE"/out/linux-xiaomi-marble_*.deb | head -1)
           [ -n "$DEB" ] || { echo "FAIL: no kernel deb built"; exit 1; }
           dpkg-deb -f "$DEB" Package Version Architecture Depends
 
-          # [^/][^/]* so the bare ./boot/ directory entry dpkg-deb lists
-          # does not count as a boot file; steps run under sh -e (dash), so
-          # no process substitution anywhere in here.
+          # [^/][^/]* skips dpkg-deb's bare ./boot/ entry; sh -e (dash), no process substitution.
           BOOT=$(dpkg-deb -c "$DEB" | awk '{print $6}' | grep '^\./boot/[^/][^/]*$' | sort)
           EXPECT=$(printf './boot/sm8475-xiaomi-marble-%s.dtb\n./boot/vmlinuz-%s\n' "$KREL" "$KREL")
           if [ "$BOOT" != "$EXPECT" ]; then
@@ -490,29 +433,20 @@ jobs:
           if ! file "$RUNNER_TEMP/verify/boot/vmlinuz-$KREL" | grep -q 'ARM64 boot executable Image'; then
             echo "FAIL: vmlinuz is not an uncompressed arm64 Image"; exit 1
           fi
-          # ath11k is a module, so the WLAN MAC patch can only be checked in
-          # the built module. Assert on the firmware file name the patch
-          # introduces: an unpatched kernel still builds and boots, it just
-          # comes up with a random MAC.
+          # ath11k is a module: assert on the firmware name the MAC patch adds.
           MOD=$(find "$RUNNER_TEMP/verify" -name 'ath11k.ko.zst' | head -1)
           [ -n "$MOD" ] || { echo "FAIL: ath11k.ko.zst not found in the kernel deb"; exit 1; }
           zstdcat "$MOD" | strings | grep -q 'wlan_mac.bin' \
             || { echo "FAIL: ath11k WLAN MAC patch is not in the built module"; exit 1; }
 
-          # Same reasoning for the iris decode-order patch: an unpatched
-          # kernel builds and boots, it just cannot feed VA-API clients. The
-          # handler the patch adds is a static function, so it is present in
-          # the module's kallsyms table but not as an exported symbol.
+          # iris decode-order: assert on the static handler in the module's kallsyms.
           IRIS=$(find "$RUNNER_TEMP/verify" -name 'qcom-iris.ko.zst' | head -1)
           [ -n "$IRIS" ] || { echo "FAIL: qcom-iris.ko.zst not found in the kernel deb"; exit 1; }
           zstdcat "$IRIS" | strings | grep -q 'iris_hfi_gen2_set_decode_order_output' \
             || { echo "FAIL: iris decode-order patch is not in the built module"; exit 1; }
           echo "kernel deb verified: $DEB"
 
-      # Same reasoning as the kernel: assert on the deliverable. The
-      # Bluetooth link is the one that has already shipped wrong once
-      # (qca/wcnbtfw21.tlv, with the "hp" stripped), which makes btqca fail
-      # with -ENOENT on WCN6855 while the blobs look present on disk.
+      # firmware: assert on the Bluetooth link btqca opens (shipped wrong once).
       - name: Verify firmware DEB
         run: |
           DEB=$(ls "$GITHUB_WORKSPACE"/out/firmware-xiaomi-marble_*.deb | head -1)
@@ -564,9 +498,7 @@ jobs:
           grep -Fq 'SectionDevice."Headset"' "$RUNNER_TEMP/marble-HiFi.conf"
           grep -Fq "RX_CODEC_DMA_RX_0 Audio Mixer MultiMedia2" "$RUNNER_TEMP/marble-HiFi.conf"
 
-      # libssc is a build dependency of iio-sensor-proxy-ssc, so its contents
-      # matter as much as its runtime behaviour: the headers and the pkg-config
-      # file are the interface the other package compiles against.
+      # libssc is a build dependency: headers and pkg-config are the interface.
       - name: Verify libssc DEB
         run: |
           DEB=$(ls "$GITHUB_WORKSPACE"/out/libssc_*.deb | head -1)
@@ -583,16 +515,12 @@ jobs:
           SO=$(find "$RUNNER_TEMP/verify-libssc" -name 'libssc.so.2*' -type f | head -1)
           [ -n "$SO" ] || { echo "FAIL: no libssc.so.2 in the package"; exit 1; }
           echo "shared library: $SO"
-          # A quilt patch that stops applying does not fail the build, it just
-          # quietly ships the unpatched library. Assert on the string the patch
-          # adds instead of trusting "the build succeeded".
+          # A quilt patch that stops applying ships silently: assert on the added string.
           strings "$SO" | grep -q 'not found yet, retrying' \
             || { echo "FAIL: wait-for-qmi-service.patch is not in the built library"; exit 1; }
           echo "libssc deb verified: $DEB"
 
-      # The one assertion that distinguishes this package from Debian's own
-      # iio-sensor-proxy: if -Dssc-support ever falls back to disabled, the
-      # binary no longer links libssc and dpkg-shlibdeps drops it from Depends.
+      # Must still link libssc, or -Dssc-support fell back to disabled.
       - name: Verify iio-sensor-proxy-ssc DEB
         run: |
           DEB=$(ls "$GITHUB_WORKSPACE"/out/iio-sensor-proxy-ssc_*.deb | head -1)
@@ -605,10 +533,7 @@ jobs:
             || { echo "FAIL: missing Provides: iio-sensor-proxy"; exit 1; }
 
           LIST=$(dpkg-deb -c "$DEB")
-          # Path prefixes are matched loosely: dh may answer with /usr/lib or
-          # /lib depending on the merge state of the container. What must not
-          # change is the file names, because marble-device-support drops in on
-          # iio-sensor-proxy.service and the rootfs enables that exact unit.
+          # Path prefixes vary (/usr/lib or /lib); the file names must not.
           for pat in '/usr/libexec/iio-sensor-proxy$' '/monitor-sensor$' \
                      '/systemd/system/iio-sensor-proxy\.service$' \
                      '/udev/rules\.d/80-iio-sensor-proxy\.rules$' \
@@ -618,10 +543,7 @@ jobs:
           done
           echo "iio-sensor-proxy-ssc deb verified: $DEB"
 
-      # What matters is that libva can find the driver: the .so has to sit in
-      # the multiarch dri directory and the msm alias has to point at it, or
-      # vaInitialize() silently probes nothing and every VA-API application
-      # falls back to software without saying so.
+      # libva must find the driver in the multiarch dri dir with the msm alias.
       - name: Verify libva-v4l2 DEB
         run: |
           DEB=$(ls "$GITHUB_WORKSPACE"/out/libva-v4l2_*.deb | head -1)
@@ -640,11 +562,7 @@ jobs:
             || { echo "FAIL: the msm_drv_video.so alias is missing or points elsewhere"; exit 1; }
           echo "$LIST" | grep -qE 'environment\.d/60-libva-v4l2\.conf$' \
             || { echo "FAIL: GStreamer VA environment config is missing"; exit 1; }
-          # The tracked branch (feat/encode-entrypoints) installs no launcher
-          # and no desktop entry: libva resolves the driver through the
-          # msm_drv_video.so alias above, so clients need neither. What it
-          # does install is the diagnostic trio plus the node helper they
-          # share; assert on that layout, not on main's.
+          # The branch installs no launcher, only the diagnostic trio and the node helper.
           for f in 'bin/iris-device-check\.sh' 'bin/iris-verify\.sh' \
                    'bin/iris-configure-clients\.sh' \
                    'share/iris-vaapi/iris-node\.sh'; do
@@ -703,22 +621,14 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-      # Hit-rate evidence for every package built above, not just the kernel
-      # (its step prints its own stats inline). meson wraps the compiler with
-      # ccache on its own when `ccache` is on PATH and CC/CXX are unset — so
-      # "Cacheable calls: 0" here means the wrapper never engaged and the
-      # restore/save below is buying nothing. Worth knowing before blaming a
-      # slow job on the cache.
+      # Cacheable calls: 0 means meson never wrapped the compiler; the cache is idle.
       - name: ccache stats
         if: always()
         run: |
           echo "CCACHE_DIR=${CCACHE_DIR:-unset}  CCACHE_MAXSIZE=${CCACHE_MAXSIZE:-unset}"
           ccache --show-stats -v || true
 
-      # Whatever the job compiled stays cached even when a build or a verify
-      # assertion above failed (see the note on the restore step). The key is
-      # this run's, so this only ever adds an entry; if it already exists the
-      # action warns and skips instead of failing.
+      # Cache this run's output even when a step above failed.
       - name: Save ccache
         if: always()
         uses: actions/cache/save@v6
@@ -744,9 +654,7 @@ jobs:
           name: marble-debs
           path: debs
 
-      # dbgsym packages are kept in the build artifact (GitHub Actions) for
-      # debugging, but must not land in the release: they are huge and not
-      # useful to end users. Stage only the non-dbgsym debs for the release.
+      # dbgsym debs stay in the build artifact, never in the release.
       - name: Stage release DEBs (drop dbgsym)
         run: |
           rm -rf release-debs && mkdir -p release-debs

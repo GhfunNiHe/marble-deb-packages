@@ -1,7 +1,5 @@
 #!/bin/sh
-# Load parameters according to the device configuration, then exec the real
-# daemon from /usr/libexec. The marble-device-support drop-in overrides
-# hexagonrpcd_device/_dsp/_fw_dir for the SM8475 SLPI.
+# Load the device parameters, then exec the real daemon from /usr/libexec.
 if [ "$#" -eq 0 ]; then
 	for _dt_compatible in $(cat /proc/device-tree/compatible | tr '\0' ' '); do
 		case "$_dt_compatible" in

@@ -14,41 +14,18 @@ export DH_VERBOSE = 1
 %:
 	dh $@
 
-# The kernel has no configure step, and the source tree already carries our
-# patches (the build pulls the project's own linux-marble branch), so there is
-# nothing to apply here. Keep the override so dh does not look for a configure
-# script in the kernel tree; config sync happens in the build rule
-# (LOCALVERSION depends on the upstream HEAD commit resolved at build time).
+# The tree already carries the patches, so there is nothing to configure here.
 override_dh_auto_configure:
 	:
 
-# dh_auto_clean would run 'make distclean', and upstream's MRPROPER_FILES
-# lists the top-level debian/ directory (make deb-pkg creates it there, so
-# mrproper deletes it) - which is exactly where this packaging lives. The
-# tree arrives as a fresh tarball anyway, so there is nothing to clean.
+# distclean would delete the top-level debian/ this packaging lives in.
 override_dh_auto_clean:
 
-# The kernel tree has a `test` target that dh_auto_test finds and runs, and it
-# is not a test suite: it is `make syncconfig`, which re-runs kconfig's
-# scripts/kconfig/conf on the real .config. Interactively that process blocks
-# forever reading /dev/pts (its stdin), and the whole build hangs after Image
-# is already built; with stdin at /dev/null it returns immediately but has
-# still touched .config behind the build's back. There is nothing to test in a
-# kernel package, so skip it outright.
+# The 'test' target is `make syncconfig`: it hangs on /dev/pts and rewrites .config.
 override_dh_auto_test:
 
 override_dh_auto_build:
-	# Resolve a short hash for a traceable LOCALVERSION (same scheme as the
-	# sheng RPM spec), in order of trust:
-	#   1. KERNEL_COMMIT_HASH - an explicit pin from the caller;
-	#   2. the built tree's own git HEAD - the only source that describes
-	#      what is actually being compiled (a local checkout, or a build
-	#      started from one). Note a newer upstream commit must NOT win here:
-	#      it would print a hash the tree does not contain;
-	#   3. github, with retries - CI builds from a tarball with no .git, and
-	#      a single-shot git ls-remote drops out often enough under load that
-	#      the silent "unknown" fallback renames the release string, and with
-	#      it every module path, behind the builder's back.
+	# LOCALVERSION hash: explicit pin, then the tree's own HEAD, then github with retries.
 	COMMIT_HASH="$${KERNEL_COMMIT_HASH:-}"; \
 		if [ -z "$$COMMIT_HASH" ] && [ -d .git ]; then \
 			COMMIT_HASH=$$(git rev-parse --short=7 HEAD 2>/dev/null); \
@@ -81,12 +58,7 @@ override_dh_auto_build:
 		Image modules qcom/$(DTB_NAME).dtb
 
 override_dh_auto_install:
-	# /boot carries only what the boot chain reads: the uncompressed Image
-	# (under the vmlinuz- name the postinst syncs to the ESP) and the DTB.
-	# No Image- duplicate, no Image.gz (U-Boot booti loads uncompressed), no
-	# System.map/config (debug/info only, never read at boot).
-	# The exact .config the kernel was built with ships next to the
-	# kernel.release marker instead of /boot.
+	# /boot carries only what the boot chain reads: Image (as vmlinuz-<ver>) and the DTB.
 	KREL=$$(cat include/config/kernel.release); \
 	install -d \
 		debian/$(PKG)/boot \
