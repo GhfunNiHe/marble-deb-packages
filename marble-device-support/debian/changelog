@@ -1,3 +1,9 @@
+marble-device-support (1.0.0-26) unstable; urgency=medium
+
+  * Select suspend-to-idle for systemd suspend on marble.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 26 Nov 2026 20:33:00 +0800
+
 marble-device-support (1.0.0-25) unstable; urgency=medium
 
   * Order hexagonrpcd after the sensor DSP device and serve the prebuilt
