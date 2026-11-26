@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+"""Build a local batterysecret runtime from mounted Android partitions."""
+
+import argparse
+import ctypes
+import os
+from pathlib import Path, PurePosixPath
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+
+
+LINKER = "/system/bin/linker64"
+VERIFY = "/vendor/bin/batterysecret"
+PROPERTIES = "/dev/__properties__"
+LIBDIRS = (
+    "/system/lib64", "/system_ext/lib64", "/vendor/lib64",
+    "/apex/com.android.vndk.v31/lib64", "/apex/com.android.runtime/lib64/bionic",
+)
+LDD_ROW = re.compile(r"\s*([\w.+@-]+)\s+=>\s+(\S+)\s+\(0x[0-9a-fA-F]+\)\s*")
+
+
+def dependencies(roots, properties):
+    cmd = ["bwrap", "--unshare-all", "--die-with-parent", "--new-session",
+           "--cap-drop", "ALL", "--clearenv"]
+    for partition, directory in roots.items():
+        cmd += ["--ro-bind", str(directory), "/" + partition]
+    cmd += ["--dev", "/dev", "--proc", "/proc", "--ro-bind", str(properties), PROPERTIES,
+            "--setenv", "ANDROID_ROOT", "/system", "--setenv", "ANDROID_DATA", "/data",
+            "--setenv", "LD_LIBRARY_PATH", ":".join(LIBDIRS), LINKER, "--list", VERIFY]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    if result.returncode:
+        raise ValueError(f"linker --list exited {result.returncode}: {result.stderr.strip()}")
+    files = set()
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        if "=>" not in line and ("linkerconfig" in line or "ld.config" in line):
+            continue
+        row = LDD_ROW.fullmatch(line)
+        if not row:
+            raise ValueError(f"unrecognized linker dependency: {line!r}")
+        name, path = row.groups()
+        if (name, path) == ("linux-vdso.so.1", "[vdso]"):
+            continue
+        if (str(PurePosixPath(path)) != path or ".." in PurePosixPath(path).parts or
+                not any(path.startswith(d + "/") for d in LIBDIRS)):
+            raise ValueError(f"unexpected dependency path: {path!r}")
+        files.add(path)
+    if not files:
+        raise ValueError("linker returned no shared libraries")
+    return files
+
+
+def source_file(roots, path):
+    # Android absolute symlinks refer to the guest root, including across partitions.
+    pending = list(PurePosixPath(path).parts[1:])
+    resolved = []
+    links = 0
+    while pending:
+        item = pending.pop(0)
+        if item == "..":
+            if not resolved:
+                raise ValueError(f"symlink escapes Android root: {path}")
+            resolved.pop()
+            continue
+        resolved.append(item)
+        if resolved[0] not in roots:
+            raise ValueError(f"symlink leaves Android partitions: {path}")
+        source = roots[resolved[0]].joinpath(*resolved[1:])
+        if source.is_symlink():
+            links += 1
+            if links > 40:
+                raise ValueError(f"too many symlinks: {path}")
+            target = PurePosixPath(os.readlink(source))
+            resolved.pop()
+            if target.is_absolute():
+                resolved = []
+                pending = list(target.parts[1:]) + pending
+            else:
+                pending = list(target.parts) + pending
+    if not resolved:
+        raise ValueError(f"not a file: {path}")
+    source = roots[resolved[0]].joinpath(*resolved[1:])
+    if not stat.S_ISREG(source.stat().st_mode):
+        raise ValueError(f"not a regular Android file: {path}")
+    return source, "/" + "/".join(resolved)
+
+
+def copy_file(source, destination, mode):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination)
+    destination.chmod(mode)
+
+
+def publish(stage, output):
+    # renameat2(RENAME_NOREPLACE) also protects an empty destination created
+    # by another preparer between the initial check and completion.
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.renameat2(-100, os.fsencode(stage), -100, os.fsencode(output), 1) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), output)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for partition in ("system", "system_ext", "vendor", "apex"):
+        parser.add_argument("--" + partition.replace("_", "-"), type=Path, required=True,
+                            help=f"mounted Android /{partition} directory")
+    parser.add_argument("--board-properties", required=True, type=Path,
+                        help="0444 Android board property area generated from this ROM")
+    parser.add_argument("--output", required=True, type=Path,
+                        help="new local runtime directory (its parent must exist)")
+    args = parser.parse_args()
+    roots = {p: getattr(args, p).resolve(strict=True) for p in
+             ("system", "system_ext", "vendor", "apex")}
+    if not all(path.is_dir() for path in roots.values()):
+        raise ValueError("each Android mount must be a directory")
+    props = args.board_properties
+    if props.lstat().st_mode != (stat.S_IFREG | 0o444):
+        raise ValueError(f"expected a regular 0444 board property file: {props}")
+    props = props.resolve(strict=True)
+    output = args.output.absolute()
+    if os.path.lexists(output):
+        raise FileExistsError(f"output already exists: {output}")
+    if any(output.parent.resolve().is_relative_to(root) for root in roots.values()):
+        raise ValueError("output must be outside the input partitions")
+    libs = dependencies(roots, props)
+    with tempfile.TemporaryDirectory(prefix=".mipps-prepare-", dir=output.parent) as temp:
+        stage = Path(temp) / "android"
+        stage.mkdir(mode=0o755)
+        staged_roots = {p: stage / p for p in roots}
+        for dest in staged_roots.values():
+            dest.mkdir()
+        inodes = {}
+        for path in sorted(libs | {LINKER, VERIFY}):
+            src, actual = source_file(roots, path)
+            dst = stage / path[1:]
+            existing = inodes.get(src)
+            if existing is None:
+                copy_file(src, dst, 0o555 if path in (LINKER, VERIFY) else 0o444)
+                inodes[src] = dst
+            else:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                os.link(existing, dst)
+            if path == LINKER and actual != LINKER:
+                # Keep the APEX linker entry available to callers as well.
+                real_linker = stage / actual[1:]
+                real_linker.parent.mkdir(parents=True, exist_ok=True)
+                os.link(dst, real_linker)
+        staged_props = stage / PROPERTIES[1:]
+        copy_file(props, staged_props, 0o444)
+        staged_libs = dependencies(staged_roots, staged_props)
+        if staged_libs != libs:
+            raise ValueError(f"staged linker resolved different libraries: {sorted(libs ^ staged_libs)}")
+        publish(stage, output)
+    print(f"Prepared {output} with {len(libs)} shared libraries")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        sys.exit(f"prepare-android-runtime: {exc}")

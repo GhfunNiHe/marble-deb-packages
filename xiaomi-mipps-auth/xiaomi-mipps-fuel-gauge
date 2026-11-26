@@ -1,0 +1,93 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: MIT
+"""Run marble's original battery verifier against the main fuel gauge."""
+
+import errno
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+ANDROID = Path("/var/lib/xiaomi-mipps-auth/android")
+GAUGE = Path("/sys/class/power_supply/qcom-battmgr-usb/device/xiaomi")
+LIBRARIES = ("/system/lib64:/system_ext/lib64:/vendor/lib64:/apex/com.android.vndk.v31/lib64:"
+             "/apex/com.android.runtime/lib64/bionic")
+
+
+def verified():
+    value = (GAUGE / "authentic").read_text(encoding="ascii").strip()
+    if value not in ("0", "1"):
+        raise ValueError(f"unexpected ADSP fuel-gauge authentication value {value!r}")
+    return value == "1"
+
+
+def verify():
+    # The power_supply can be registered just before its parent's XM sysfs
+    # group is published. A Type-C attach can also precede ADSP readiness.
+    deadline = time.monotonic() + 25
+    while True:
+        try:
+            already_verified = verified()
+            break
+        except OSError as exc:
+            if exc.errno not in (errno.ENOENT, errno.EAGAIN, errno.ENOTCONN, errno.ETIMEDOUT):
+                raise
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"main fuel gauge did not become ready: {exc}") from exc
+            time.sleep(0.25)
+    if already_verified:
+        print("ADSP already reports an authenticated main fuel gauge")
+        return
+
+    if not (ANDROID / "vendor/bin/batterysecret").is_file():
+        raise FileNotFoundError(f"local stock verifier missing from {ANDROID}/vendor/bin")
+
+    command = ["bwrap", "--unshare-all", "--die-with-parent", "--new-session",
+               "--clearenv", "--cap-drop", "ALL"]
+    for part in ("system", "system_ext", "vendor", "apex"):
+        command.extend(["--ro-bind", str(ANDROID / part), "/" + part])
+    command.extend(["--dev", "/dev", "--proc", "/proc", "--remount-ro", "/proc",
+                    "--dir", "/sys/class/qcom-battery",
+                    "--ro-bind", str(ANDROID / "dev/__properties__"), "/dev/__properties__"])
+    for name in ("verify_slave_flag", "verify_digest", "authentic"):
+        command.extend(["--bind", str(GAUGE / name), "/sys/class/qcom-battery/" + name])
+    command.extend(["--remount-ro", "/", "--setenv", "ANDROID_ROOT", "/system",
+                    "--setenv", "ANDROID_DATA", "/data", "--setenv", "LD_LIBRARY_PATH", LIBRARIES,
+                    "/vendor/bin/batterysecret"])
+
+    # The stock program retries the fuel-gauge challenge up to four times,
+    # then becomes a power event daemon. Only its startup check is needed.
+    with subprocess.Popen(command, stdin=subprocess.DEVNULL, start_new_session=True) as child:
+        try:
+            deadline = time.monotonic() + 20
+            while not verified():
+                status = child.poll()
+                if status is not None:
+                    if verified():
+                        break
+                    raise RuntimeError(f"stock verifier exited with status {status} while ADSP reported 0")
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("ADSP still reported 0 after 20 seconds")
+                time.sleep(0.25)
+        finally:
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+    print("ADSP confirmed main fuel-gauge authentication")
+
+
+if __name__ == "__main__":
+    def terminate(signum, frame):
+        raise InterruptedError("fuel-gauge verification interrupted")
+
+    signal.signal(signal.SIGTERM, terminate)
+    try:
+        verify()
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"Fuel-gauge verification: {exc}", file=sys.stderr)
+        sys.exit(1)

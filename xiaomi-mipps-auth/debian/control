@@ -1,0 +1,16 @@
+Source: xiaomi-mipps-auth
+Section: admin
+Priority: optional
+Maintainer: GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: xiaomi-mipps-auth
+Architecture: arm64
+Depends: python3, bubblewrap, systemd, udev, ${misc:Depends}
+Description: Main fuel-gauge authentication for Xiaomi marble
+ Runs the phone's original battery verifier in isolation when the ADSP
+ battery manager becomes available and when a USB-C partner is attached.
+ Requires the marble qcom_battmgr fuel-gauge interface and an Android
+ runtime prepared locally from the phone's own vendor files.
