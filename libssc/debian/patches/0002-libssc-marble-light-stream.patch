@@ -1,0 +1,254 @@
+Description: use the TCS3701 ambient light stream on Xiaomi marble
+ The on-change channel can stay at zero. Prefer ambient_light_cal_strm
+ when present and read its light field through the standard light API.
+ Keep the sensor alive until queued measurement callbacks have finished.
+Forwarded: no
+--- a/src/libssc-common-private.h
++++ b/src/libssc-common-private.h
+@@ -26,6 +26,7 @@
+ #include <sys/stat.h>
+ #include <gio/gio.h>
+ #include <libqmi-glib.h>
++#include "libssc-sensor.h"
+ 
+ #define SSC_MSG_REQUEST_ENABLE_REPORT_CONTINUOUS 	513
+ #define SSC_MSG_REQUEST_ENABLE_REPORT_ON_CHANGE		514
+@@ -81,6 +82,9 @@
+ } SyncContext;
+ 
+ void
++ssc_sensor_prefer_data_type (SSCSensor *self, const gchar *preferred);
++
++void
+ ssc_common_dump_protobuf (GArray *protobuf);
+ 
+ void
+--- a/src/libssc-sensor.c
++++ b/src/libssc-sensor.c
+@@ -51,6 +51,7 @@
+ 	gchar *name;
+ 	gchar *vendor;
+ 	gchar *data_type;
++	gchar *fallback_data_type;
+ 	guint stream_type;
+ 	gboolean available;
+ 	gfloat sample_rate;
+@@ -336,6 +337,7 @@
+ 
+ 		/* Only default sensor for data type is reported */
+ 		if (suid_msg != NULL && suid_msg->n_uid > 0) {
++			g_clear_pointer (&priv->fallback_data_type, g_free);
+ 			priv->uid_high = suid_msg->uid[0]->high;
+ 			priv->uid_low = suid_msg->uid[0]->low;
+ 
+@@ -351,6 +353,13 @@
+ 			g_debug ("No '%s' sensor available", priv->data_type);
+ 			ssc_suid_response__free_unpacked (suid_msg, NULL);
+ 
++			if (priv->fallback_data_type && !g_cancellable_is_cancelled (g_task_get_cancellable (ctx->task))) {
++				g_free (priv->data_type);
++				priv->data_type = g_steal_pointer (&priv->fallback_data_type);
++				discover (ctx->sensor, ctx->task);
++				return;
++			}
++
+ 			g_signal_handler_disconnect (self, priv->report_id);
+ 			priv->report_id = 0;
+ 
+@@ -541,6 +550,15 @@
+ 
+ /*****************************************************************************/
+ 
++void
++ssc_sensor_prefer_data_type (SSCSensor *self, const gchar *preferred)
++{
++	SSCSensorPrivate *priv = ssc_sensor_get_instance_private (self);
++
++	priv->fallback_data_type = priv->data_type;
++	priv->data_type = g_strdup (preferred);
++}
++
+ static void
+ discovery_ready (SSCClient *self, GAsyncResult *result, gpointer user_data)
+ {
+@@ -792,8 +810,8 @@
+ 	if (priv->vendor)
+ 		g_free (priv->vendor);
+ 
+-	if (priv->data_type)
+-		g_free (priv->data_type);
++	g_free (priv->data_type);
++	g_free (priv->fallback_data_type);
+ 
+ 	g_clear_object (&priv->client);
+ }
+--- a/src/libssc-sensor-light.c
++++ b/src/libssc-sensor-light.c
+@@ -16,12 +16,15 @@
+  * along with this program. If not, see <https://www.gnu.org/licenses/>.
+  */
+ 
++#include <string.h>
+ #include "libssc-client-private.h"
+ #include "libssc-common-private.h"
+ #include "ssc-common.pb-c.h"
+ #include "ssc-sensor-light.pb-c.h"
+ #include "libssc-sensor-light.h"
+ 
++#define MARBLE_LIGHT_STREAM "ambient_light_cal_strm"
++
+ enum {
+ 	SIGNAL_MEASUREMENT,
+ 	N_SIGNALS
+@@ -29,7 +32,9 @@
+ static guint signals[N_SIGNALS];
+ 
+ typedef struct _SSCSensorLightPrivate {
+-	guint report_id;
++	gulong report_id;
++	gboolean marble;
++	gboolean cal_stream;
+ } SSCSensorLightPrivate;
+ 
+ G_DEFINE_TYPE_WITH_CODE (SSCSensorLight, ssc_sensor_light, SSC_TYPE_SENSOR,
+@@ -43,6 +48,7 @@
+ static void
+ signal_context_free (SignalContext *ctx)
+ {
++	g_object_unref (ctx->sensor);
+ 	g_slice_free (SignalContext, ctx);
+ }
+ 
+@@ -62,6 +68,7 @@
+ {
+ 	SscLightResponse *msg = NULL;
+ 	SSCSensorLight *sensor = SSC_SENSOR_LIGHT (user_data);
++	SSCSensorLightPrivate *priv = ssc_sensor_light_get_instance_private (sensor);
+ 	SignalContext *ctx = NULL;
+ 	guint64 sensor_uid_low;
+ 	guint64 sensor_uid_high;
+@@ -80,17 +87,20 @@
+ 			return;
+ 		}
+ 
+-		/* Only report intensity in Lux, raw sensor values are ignored */
+-		if (msg->n_intensity >= 1) {
+-			intensity = msg->intensity[0];
+-
+-			/* Emit signal in main context instead of thread's context if intensity is positive */
+-			if (intensity >= 0.0) {
+-				ctx = g_slice_new0 (SignalContext);
+-				ctx->sensor = sensor;
+-				ctx->intensity = intensity;
+-				g_idle_add_full (G_PRIORITY_DEFAULT_IDLE, emit_signal, ctx, (GDestroyNotify)signal_context_free);
+-			}
++		/* On marble, field 1 is the light reading in both known TCS3701
++		 * layouts. Fields 4 through 7 of the streaming report are raw RGBC. */
++		if (priv->cal_stream)
++			intensity = msg->n_intensity == 16 ? msg->intensity[1] : -1.0;
++		else if (msg->n_intensity == 4)
++			intensity = msg->intensity[1];
++		else
++			intensity = msg->n_intensity ? msg->intensity[0] : -1.0;
++
++		if (intensity >= 0.0) {
++			ctx = g_slice_new0 (SignalContext);
++			ctx->sensor = g_object_ref (sensor);
++			ctx->intensity = intensity;
++			g_idle_add_full (G_PRIORITY_DEFAULT_IDLE, emit_signal, ctx, (GDestroyNotify)signal_context_free);
+ 		}
+ 
+ 		ssc_light_response__free_unpacked (msg, NULL);
+@@ -125,7 +135,7 @@
+ ssc_sensor_light_close (SSCSensorLight *self, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data)
+ {
+ 	GTask *task = NULL;
+-	SSCClient *client = NULL;
++	g_autoptr (SSCClient) client = NULL;
+ 	SSCSensorLightPrivate *priv = NULL;
+ 
+ 	g_assert (SSC_SENSOR_CLASS (ssc_sensor_light_parent_class)->close &&
+@@ -139,8 +149,10 @@
+ 		      SSC_SENSOR_CLIENT, &client,
+ 		      NULL);
+ 
+-	if (priv->report_id)
++	if (priv->report_id) {
+ 		g_signal_handler_disconnect (client, priv->report_id);
++		priv->report_id = 0;
++	}
+ 
+ 	/* Close sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_light_parent_class)->close (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)light_close_ready, task);
+@@ -191,7 +203,8 @@
+ ssc_sensor_light_open (SSCSensorLight *self, GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data)
+ {
+ 	SSCSensorLightPrivate *priv = NULL;
+-	SSCClient *client = NULL;
++	g_autoptr (SSCClient) client = NULL;
++	g_autofree gchar *data_type = NULL;
+ 	GTask *task = NULL;
+ 
+ 	g_assert (SSC_SENSOR_CLASS (ssc_sensor_light_parent_class)->open &&
+@@ -201,14 +214,14 @@
+ 
+ 	task = g_task_new (self, cancellable, callback, user_data);
+ 
+-	/* Start listening for reports */
++	/* Only light channels carry an illuminance measurement. */
+ 	g_object_get (SSC_SENSOR (self),
+ 		      SSC_SENSOR_CLIENT, &client,
++		      SSC_SENSOR_DATA_TYPE, &data_type,
+ 		      NULL);
+-	priv->report_id = g_signal_connect (client,
+-					    "report",
+-					    G_CALLBACK (report_received),
+-					    self);
++	priv->cal_stream = priv->marble && g_strcmp0 (data_type, MARBLE_LIGHT_STREAM) == 0;
++	if (priv->cal_stream || g_strcmp0 (data_type, "ambient_light") == 0)
++		priv->report_id = g_signal_connect_object (client, "report", G_CALLBACK (report_received), self, 0);
+ 
+ 	/* Open sensor */
+ 	SSC_SENSOR_CLASS (ssc_sensor_light_parent_class)->open (SSC_SENSOR (self), cancellable, (GAsyncReadyCallback)light_open_ready, task);
+@@ -245,6 +258,19 @@
+ static void
+ ssc_sensor_light_init (SSCSensorLight *self)
+ {
++	SSCSensorLightPrivate *priv = ssc_sensor_light_get_instance_private (self);
++	g_autofree gchar *compatible = NULL;
++	gsize len;
++
++	if (!g_file_get_contents ("/sys/firmware/devicetree/base/compatible", &compatible, &len, NULL))
++		return;
++
++	for (gsize i = 0; i < len; i += strlen (compatible + i) + 1) {
++		if (g_str_equal (compatible + i, "xiaomi,marble")) {
++			priv->marble = TRUE;
++			break;
++		}
++	}
+ }
+ 
+ SSCSensorLight *
+@@ -268,14 +294,13 @@
+ void
+ ssc_sensor_light_new (GCancellable *cancellable, GAsyncReadyCallback callback, gpointer user_data)
+ {
+-	g_async_initable_new_async (
+-			SSC_TYPE_SENSOR_LIGHT,
+-			G_PRIORITY_DEFAULT,
+-			cancellable,
+-			callback,
+-			user_data,
+-			SSC_SENSOR_DATA_TYPE, "ambient_light",
+-			NULL);
++	g_autoptr (SSCSensorLight) self = g_object_new (SSC_TYPE_SENSOR_LIGHT,
++						       SSC_SENSOR_DATA_TYPE, "ambient_light", NULL);
++	SSCSensorLightPrivate *priv = ssc_sensor_light_get_instance_private (self);
++
++	if (priv->marble)
++		ssc_sensor_prefer_data_type (SSC_SENSOR (self), MARBLE_LIGHT_STREAM);
++	g_async_initable_init_async (G_ASYNC_INITABLE (self), G_PRIORITY_DEFAULT, cancellable, callback, user_data);
+ }
+ 
+ SSCSensorLight *

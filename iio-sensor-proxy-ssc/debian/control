@@ -10,7 +10,7 @@ Build-Depends:
  libglib2.0-dev (>= 2.76),
  libgudev-1.0-dev,
  libpolkit-gobject-1-dev,
- libssc,
+ libssc (>= 0.4.4-6),
 Standards-Version: 4.6.2
 Homepage: https://gitlab.freedesktop.org/hadess/iio-sensor-proxy
 Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
@@ -20,6 +20,7 @@ Rules-Requires-Root: no
 Package: iio-sensor-proxy-ssc
 Architecture: arm64
 Depends:
+ libssc (>= 0.4.4-6),
  ${shlibs:Depends},
  ${misc:Depends},
 Provides: iio-sensor-proxy
@@ -35,7 +36,7 @@ Description: IIO sensors to D-Bus proxy (Qualcomm SSC support)
  declares that it provides, replaces and conflicts with iio-sensor-proxy, and
  the two must not be installed at the same time (they ship the same files).
  .
- Everything else is stock upstream 3.9: same D-Bus name, same unit name
+ The package keeps the upstream D-Bus name, systemd unit name
  (iio-sensor-proxy.service, which marble-device-support drops in on) and the
  same file layout, so it is a drop-in replacement for the archive package.
  .

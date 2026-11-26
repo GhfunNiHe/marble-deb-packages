@@ -1,0 +1,45 @@
+Description: expose the prebuilt sensor registry version beside the registry directory
+ The sensor DSP checks this file before regenerating its configuration.
+ The host supplies a read-only, prebuilt registry and its matching version.
+Forwarded: no
+--- a/hexagonrpcd/rpcd_builder.c
++++ b/hexagonrpcd/rpcd_builder.c
+@@ -30,6 +30,7 @@
+ #define DSP_LIBS		"/dsp/"
+ #define SENSORS_CONFIG		"/sensors/config/"
+ #define SENSORS_REGISTRY	"/sensors/registry/"
++#define SNS_REG_VERSION		"/sensors/sns_reg_version"
+ #define SNS_REG_CONFIG		"/sensors/sns_reg.conf"
+ #define SYSFS_SOCINFO		"/socinfo/"
+ 
+@@ -112,6 +113,7 @@
+ struct hexagonfs_dirent *construct_root_dir(const char *prefix, const char *dsp)
+ {
+ 	char *acdbdata, *dsp_libs, *sns_cfg, *sns_reg, *sns_reg_config, *socinfo;
++	char *sns_reg_version;
+ 	size_t n_prefix;
+ 	struct hexagonfs_dirent *persist_dir, *vendor_dir;
+ 
+@@ -120,6 +122,12 @@
+ 	acdbdata = malloc(n_prefix + strlen(ACDBDATA) + 1);
+ 	sns_cfg = malloc(n_prefix + strlen(SENSORS_CONFIG) + 1);
+ 	sns_reg = malloc(n_prefix + strlen(SENSORS_REGISTRY) + 1);
++	sns_reg_version = malloc(n_prefix + sizeof(SNS_REG_VERSION));
++	if (sns_reg_version == NULL)
++		return NULL;
++	strcpy(sns_reg_version, prefix);
++	strcat(sns_reg_version, SNS_REG_VERSION);
++
+ 	sns_reg_config = malloc(n_prefix + strlen(SNS_REG_CONFIG) + 1);
+ 	socinfo = malloc(n_prefix + strlen(SYSFS_SOCINFO) + 1);
+ 
+@@ -162,7 +170,8 @@
+ 	 */
+ 	persist_dir = hfs_mkdir("persist", 1,
+ 				hfs_mkdir("sensors", 1,
+-					hfs_mkdir("registry", 1,
++					hfs_mkdir("registry", 2,
++						hfs_map("sns_reg_version", sns_reg_version),
+ 						hfs_map("registry", sns_reg)
+ 					)
+ 				)

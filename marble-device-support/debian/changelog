@@ -1,3 +1,10 @@
+marble-device-support (1.0.0-25) unstable; urgency=medium
+
+  * Order hexagonrpcd after the sensor DSP device and serve the prebuilt
+    sensor registry without its JSON inputs. Tag each SSC sensor once.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 26 Nov 2026 19:55:00 +0800
+
 marble-device-support (1.0.0-24) UNRELEASED; urgency=medium
 
   * Add WCD9385 headphones and headset microphone UCM devices with real jack

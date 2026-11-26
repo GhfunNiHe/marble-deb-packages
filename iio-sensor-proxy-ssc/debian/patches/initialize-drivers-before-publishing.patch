@@ -1,0 +1,122 @@
+Description: finish driver discovery before accepting D-Bus claims
+ Synchronous SSC discovery iterates the main context. A desktop client
+ can claim a partially initialized driver while discovery is in progress.
+ Initialize drivers before publishing the bus name and interfaces.
+Forwarded: no
+--- a/src/iio-sensor-proxy.c
++++ b/src/iio-sensor-proxy.c
+@@ -723,6 +723,43 @@
+     };
+ 	guint i;
+ 
++	/* Initialize DBus clients hash table before DBus is fully exposed */
++	data->client = g_udev_client_new (subsystems);
++
++	for (i = 0; i < NUM_SENSOR_TYPES; i++)
++		data->clients[i] = create_clients_hash_table ();
++
++	data->connection = g_object_ref (connection);
++
++	if (!find_sensors (data->client, data))
++		goto bail;
++
++	g_signal_connect (G_OBJECT (data->client), "uevent",
++			  G_CALLBACK (sensor_changes), data);
++
++	for (i = 0; i < NUM_SENSOR_TYPES; i++) {
++		SensorDevice *sensor_device;
++
++		data->sensor_startup_dbus_invocations_delayed[i] = g_ptr_array_new ();
++
++		if (!driver_type_exists (data, i))
++			continue;
++
++		sensor_device = driver_open (DRIVER_FOR_TYPE(i), UDEV_DEVICE_FOR_TYPE(i),
++					     driver_type_to_callback_func (data->drivers[i]->type), data);
++		if (!sensor_device) {
++			DRIVER_FOR_TYPE(i) = NULL;
++			g_clear_object (&UDEV_DEVICE_FOR_TYPE(i));
++			continue;
++		}
++
++		DEVICE_FOR_TYPE(i) = sensor_device;
++	}
++
++	if (!any_sensors_left (data))
++		goto bail;
++
++	/* Publish the interfaces after all driver handles are ready for Claim calls. */
+ 	g_dbus_connection_register_object (connection,
+ 					   SENSOR_PROXY_DBUS_PATH,
+ 					   data->introspection_data->interfaces[0],
+@@ -739,59 +776,23 @@
+ 					   NULL,
+ 					   NULL);
+ 
+-	/* Initialize DBus clients hash table before DBus is fully exposed */
+-	data->client = g_udev_client_new (subsystems);
+-
+-	for (guint i = 0; i < NUM_SENSOR_TYPES; i++)
+-		data->clients[i] = create_clients_hash_table ();
+-
+-	data->connection = g_object_ref (connection);
+-}
+-
+-static void
+-name_acquired_handler (GDBusConnection *connection,
+-		       const gchar     *name,
+-		       gpointer         user_data)
+-{
+-	SensorData *data = user_data;
+-	guint i;
+-
+-	if (!find_sensors (data->client, data))
+-		goto bail;
+-
+-	g_signal_connect (G_OBJECT (data->client), "uevent",
+-			  G_CALLBACK (sensor_changes), data);
+-
+-	for (i = 0; i < NUM_SENSOR_TYPES; i++) {
+-		SensorDevice *sensor_device;
+-
+-		data->sensor_startup_dbus_invocations_delayed[i] = g_ptr_array_new ();
+-
+-		if (!driver_type_exists (data, i))
+-			continue;
+-
+-		sensor_device = driver_open (DRIVER_FOR_TYPE(i), UDEV_DEVICE_FOR_TYPE(i),
+-					     driver_type_to_callback_func (data->drivers[i]->type), data);
+-		if (!sensor_device) {
+-			DRIVER_FOR_TYPE(i) = NULL;
+-			g_clear_object (&UDEV_DEVICE_FOR_TYPE(i));
+-			continue;
+-		}
+-
+-		DEVICE_FOR_TYPE(i) = sensor_device;
+-	}
+-
+-	if (!any_sensors_left (data))
+-		goto bail;
+-
+-	send_dbus_event (data, PROP_ALL);
+-	send_dbus_event (data, PROP_ALL_COMPASS);
+ 	return;
+ 
+ bail:
+ 	data->ret = 0;
+ 	g_message ("No sensors or missing kernel drivers for the sensors. Exiting");
+ 	g_main_loop_quit (data->loop);
++}
++
++static void
++name_acquired_handler (GDBusConnection *connection,
++		       const gchar     *name,
++		       gpointer         user_data)
++{
++	SensorData *data = user_data;
++
++	send_dbus_event (data, PROP_ALL);
++	send_dbus_event (data, PROP_ALL_COMPASS);
+ }
+ 
+ static gboolean

@@ -1,3 +1,12 @@
+hexagonrpc (0.4.0-2marble1) unstable; urgency=medium
+
+  * Expose sns_reg_version alongside the prebuilt registry so the sensor DSP
+    can read its version from /persist/sensors/registry/sns_reg_version.
+  * Drop After=multi-user.target from hexagonrpcd.service to avoid a boot
+    ordering cycle when the sensor proxy starts as part of multi-user.target.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 26 Nov 2026 19:54:00 +0800
+
 hexagonrpc (0.4.0-0marble1) unstable; urgency=medium
 
   * Independently build upstream hexagonrpc 0.4.0 for the Ubuntu 24.04

@@ -1,3 +1,19 @@
+libssc (0.4.4-7) unstable; urgency=medium
+
+  * Prefer the TCS3701 ambient_light_cal_strm channel on Xiaomi marble,
+    falling back to ambient_light if its SUID is absent. Use the light
+    field in the 16-value stream and the four-value on-change report.
+  * Hold a sensor reference while a light measurement awaits delivery.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 26 Nov 2026 20:14:00 +0800
+
+libssc (0.4.4-6) unstable; urgency=medium
+
+  * Wait asynchronously for QRTR to publish SSC during cold boot. Allow
+    cancellation and time out after 30 seconds if SSC stays unavailable.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 26 Nov 2026 19:58:00 +0800
+
 libssc (0.4.4-5) unstable; urgency=medium
 
   * Add 0004-meson-custom-target-depends.patch: pass the generated Python

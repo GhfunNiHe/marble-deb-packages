@@ -1,3 +1,10 @@
+iio-sensor-proxy-ssc (3.9-3) unstable; urgency=medium
+
+  * Start sensor discovery after hexagonrpcd without a fixed eight-second
+    delay. Finish opening drivers before accepting desktop sensor claims.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Thu, 26 Nov 2026 19:55:00 +0800
+
 iio-sensor-proxy-ssc (3.9-2) unstable; urgency=medium
 
   * Add a 10-marble-sensors drop-in ordering the proxy after hexagonrpcd and
