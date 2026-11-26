@@ -22,6 +22,41 @@ def verified():
     return value == "1"
 
 
+def confirmed_or_pending():
+    try:
+        return verified()
+    except OSError as exc:
+        if exc.errno in (errno.EAGAIN, errno.ENOTCONN, errno.ETIMEDOUT):
+            return False
+        raise
+
+
+def run_verifier(command):
+    # The stock program retries the challenge up to four times, then waits
+    # for power events. Stop it before starting another fresh challenge.
+    with subprocess.Popen(command, stdin=subprocess.DEVNULL, start_new_session=True) as child:
+        try:
+            deadline = time.monotonic() + 20
+            while not confirmed_or_pending():
+                status = child.poll()
+                if status is not None:
+                    if confirmed_or_pending():
+                        break
+                    raise RuntimeError(f"stock verifier exited with status {status} before ADSP confirmation")
+                if time.monotonic() >= deadline:
+                    return False
+                time.sleep(0.25)
+            return True
+        finally:
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+
+
 def verify():
     # The power_supply can be registered just before its parent's XM sysfs
     # group is published. A Type-C attach can also precede ADSP readiness.
@@ -56,28 +91,13 @@ def verify():
                     "--setenv", "ANDROID_DATA", "/data", "--setenv", "LD_LIBRARY_PATH", LIBRARIES,
                     "/vendor/bin/batterysecret"])
 
-    # The stock program retries the fuel-gauge challenge up to four times,
-    # then becomes a power event daemon. Only its startup check is needed.
-    with subprocess.Popen(command, stdin=subprocess.DEVNULL, start_new_session=True) as child:
-        try:
-            deadline = time.monotonic() + 20
-            while not verified():
-                status = child.poll()
-                if status is not None:
-                    if verified():
-                        break
-                    raise RuntimeError(f"stock verifier exited with status {status} while ADSP reported 0")
-                if time.monotonic() >= deadline:
-                    raise TimeoutError("ADSP still reported 0 after 20 seconds")
-                time.sleep(0.25)
-        finally:
-            if child.poll() is None:
-                child.terminate()
-                try:
-                    child.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    child.kill()
-                    child.wait()
+    if not run_verifier(command):
+        print("ADSP did not confirm within 20 seconds. Checking again in two seconds.", flush=True)
+        time.sleep(2)
+        if not confirmed_or_pending():
+            print("Starting the stock fuel-gauge verifier for a second attempt.", flush=True)
+            if not run_verifier(command):
+                raise TimeoutError("ADSP did not confirm main fuel-gauge authentication after two attempts")
     print("ADSP confirmed main fuel-gauge authentication")
 
 

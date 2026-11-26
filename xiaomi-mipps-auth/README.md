@@ -21,3 +21,5 @@ cat /sys/class/power_supply/qcom-battmgr-usb/device/xiaomi/authentic
 ```
 
 准备工具验证动态链接依赖，并要求 `--output` 指向尚未创建的目录。已有运行目录时可直接启动服务。读数 `1` 表示 ADSP 已接受主电量计的验证结果。之后电源驱动就绪或插入 USB-C 设备时，udev 会在需要时启动服务。可用 `journalctl -b -u xiaomi-mipps-fuel-gauge.service` 查看本次启动记录。
+
+冷启动时，若原厂程序运行 20 秒后仍未得到 ADSP 确认，服务会结束这一轮，等两秒后复查。仍未确认时，服务再启动一次原厂程序，用新的挑战验证。两轮都超时或遇到运行目录缺失、身份状态格式错误等问题时，服务会把原因写入日志。再次插入 USB-C 设备时仍可正常触发。

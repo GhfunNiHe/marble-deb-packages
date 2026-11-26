@@ -4,4 +4,4 @@ Description=Verify the Xiaomi marble main fuel gauge
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/xiaomi-mipps-fuel-gauge
-TimeoutStartSec=55
+TimeoutStartSec=80
