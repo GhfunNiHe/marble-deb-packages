@@ -304,7 +304,6 @@ jobs:
           dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/*.deb "$GITHUB_WORKSPACE/out/"
 
-      # modemmanager: master, pinned to the AFW-unlock / Position-Report commits.
       - name: "Build: modemmanager"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/mm.tar.gz" "$SRC_MODEMMANAGER_URL"

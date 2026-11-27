@@ -1,3 +1,10 @@
+modemmanager (1.25.95+loc1-4) experimental; urgency=medium
+
+  * Update to upstream commit 9317cbc4, which fixes the crash on netlink
+    transaction completion. Drop the corresponding backport.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 15:14:04 +0800
+
 modemmanager (1.25.95+loc1-3) experimental; urgency=medium
 
   * Rename the daemon binary package to modemmanager-marble, declaring
