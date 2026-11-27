@@ -324,6 +324,11 @@ jobs:
              "$RUNNER_TEMP/build"/libmm-glib-dev_*.deb "$RUNNER_TEMP/build"/gir1.2-modemmanager-*.deb \
              "$GITHUB_WORKSPACE/out/"
 
+      - name: "Build: network-manager"
+        env:
+          DEB_BUILD_PROFILES: nocheck
+        run: network-manager/build "$GITHUB_WORKSPACE/out"
+
       - name: "Build: callaudiod"
         run: |
           mkdir -p "$RUNNER_TEMP/build/callaudiod/src"
@@ -434,33 +439,10 @@ jobs:
           path: ~/.ccache
           key: ccache-marble-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
 
-  network-manager-debian:
-    name: Build Debian NetworkManager
-    runs-on: ubuntu-24.04-arm
-    container: debian:sid
-    env:
-      DEB_BUILD_OPTIONS: nocheck
-      DEBIAN_FRONTEND: noninteractive
-    steps:
-      - name: Install build tools
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends build-essential ca-certificates fakeroot git
-      - uses: actions/checkout@v4
-      - name: Build NetworkManager
-        run: network-manager/build-debian out
-      - name: Upload the Debian NetworkManager bundle
-        uses: actions/upload-artifact@v7
-        with:
-          name: network-manager-debian
-          path: out/network-manager-debian_*.tar
-          retention-days: 14
-          if-no-files-found: error
-
   # GitHub Release
   release:
     name: Create GitHub Release
-    needs: [build, network-manager-debian]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -481,20 +463,12 @@ jobs:
           rm -rf release-debs && mkdir -p release-debs
           find debs -name '*.deb' ! -name '*-dbgsym*.deb' -exec cp -t release-debs {} +
 
-      - name: Download the Debian NetworkManager bundle
-        uses: actions/download-artifact@v8
-        with:
-          name: network-manager-debian
-          path: release-debs
-
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: marble-deb-${{ env.SHORT_SHA }}
           name: Marble Deb Packages (${{ env.SHORT_SHA }})
-          files: |
-            release-debs/**/*.deb
-            release-debs/network-manager-debian_*.tar
+          files: release-debs/**/*.deb
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

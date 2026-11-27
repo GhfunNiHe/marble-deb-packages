@@ -1,5 +1,7 @@
-network-manager (1.58.1-1+marble1) unstable; urgency=medium
+network-manager (1.58.1-1ubuntu3.1+marble1) noble; urgency=medium
 
+  * Build the common arm64 packages on Ubuntu 24.04. Keep each target
+    distribution's profile storage and include the supported pppd plugins.
   * Disconnect only the WWAN bearer acquired by NetworkManager. Preserve
     the IMS connection used for calls and SMS when mobile data stops.
 

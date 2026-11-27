@@ -1,28 +1,30 @@
-# NetworkManager for Debian on marble
+# NetworkManager for marble
 
-Debian's NetworkManager 1.58.1 disconnects every modem bearer when it stops
-a mobile data connection. On marble, 81voltd uses a separate bearer for IMS
-voice and SMS. The patch in this directory limits teardown to the bearer
-returned by NetworkManager's own connection request. The device support
-package configures ModemManager to keep the QRTR modem across suspend.
+When NetworkManager disconnects mobile data, it releases the bearer it opened.
+The separate IMS bearer used by 81voltd stays connected for voice and SMS.
+The device support package configures ModemManager to retain the QRTR modem
+over suspend.
 
-## Build on Debian arm64
+## Build and install
 
-From the repository root, run the same entry point as the package workflow
-in a Debian sid arm64 build container. It verifies the source archives from
-Debian Snapshot, extends Debian's changelog and patch series, and builds the
-binary packages.
+The `Build DEBs` workflow builds NetworkManager with the other device packages
+on Ubuntu 24.04 arm64. To build it manually in a Noble arm64 build environment,
+run these commands as root from the repository root.
 
 ```sh
 apt-get update
 apt-get install -y --no-install-recommends build-essential ca-certificates fakeroot
-DEB_BUILD_OPTIONS=nocheck network-manager/build-debian out
+DEB_BUILD_OPTIONS=nocheck DEB_BUILD_PROFILES=nocheck network-manager/build out
 ```
 
-The release asset `network-manager-debian_1.58.1-1_arm64.tar` contains
-`network-manager`, `libnm0` and `network-manager-tui` built together.
-The Debian image workflow selects the bundle by the source version of the
-distribution's NetworkManager. For manual installation on that Debian
-version, extract the tar and install the three packages together with APT.
-When updating the base version, check upstream's disconnect handling and
-repeat the suspend test with both an IMS bearer and a mobile data bearer.
+The build uses Ubuntu's NetworkManager source and packaging, plus the patches
+in this directory. It checks all downloaded inputs against `SHA256SUMS`.
+Noble builds libndp 1.9 from source for the IPv6-only cellular network
+translation code (464XLAT). The PPP plugins use the pppd headers for the ABI
+versions installed by the supported images.
+
+The image installer takes the runtime packages directly from the device
+release. Ubuntu keeps its Netplan profile storage and Debian uses NetworkManager
+keyfiles. For a manual install, download the runtime packages from one release
+to an empty directory and run `sudo apt install ./*.deb` there. Install the
+matching `libnm-dev` too if the target already has the development package.

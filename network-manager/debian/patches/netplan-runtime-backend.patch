@@ -1,0 +1,180 @@
+Description: Keep the distribution's NetworkManager profile storage
+ Ubuntu writes persistent profiles through Netplan. Noble's netplan.io
+ provides the generate command, while newer versions have a helper for
+ NetworkManager. Debian uses keyfiles directly.
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2026-11-27
+
+--- a/src/core/nm-config.h
++++ b/src/core/nm-config.h
+@@ -62,6 +62,7 @@
+ GType nm_config_get_type(void);
+ 
+ NMConfig *nm_config_get(void);
++const char *nm_config_get_os_id(void);
+ 
+ const char *nm_config_change_flags_to_string(NMConfigChangeFlags flags, char *buf, gsize len);
+ 
+--- a/src/core/nm-config.c
++++ b/src/core/nm-config.c
+@@ -19,6 +19,7 @@
+ #include "libnm-core-intern/nm-keyfile-internal.h"
+ #include "libnm-core-intern/nm-keyfile-utils.h"
+ #include "libnm-glib-aux/nm-keyfile-aux.h"
++#include "libnm-glib-aux/nm-io-utils.h"
+ 
+ #define DEFAULT_CONFIG_MAIN_FILE     NMCONFDIR "/NetworkManager.conf"
+ #define DEFAULT_CONFIG_DIR           NMCONFDIR "/conf.d"
+@@ -680,6 +681,23 @@
+ 
+ /*****************************************************************************/
+ 
++const char *
++nm_config_get_os_id(void)
++{
++    static char *os_id;
++
++    if (g_once_init_enter(&os_id)) {
++        gs_free char *contents = NULL;
++        char *id = NULL;
++
++        if (g_file_get_contents("/etc/os-release", &contents, NULL, NULL)
++            || g_file_get_contents("/usr/lib/os-release", &contents, NULL, NULL))
++            nm_parse_env_file(contents, "ID", &id);
++        g_once_init_leave(&os_id, id ?: g_strdup(""));
++    }
++    return os_id;
++}
++
+ GKeyFile *
+ nm_config_create_keyfile(void)
+ {
+@@ -724,7 +742,7 @@
+         const char *e;
+ 
+         e                    = g_getenv("NM_CONFIG_ENABLE_TAG");
+-        _nm_config_match_env = g_strdup(e ?: "");
++        _nm_config_match_env = g_strdup(e ?: nm_config_get_os_id());
+     }
+ 
+     /* second, interpret the value as match-spec. */
+--- a/src/core/settings/plugins/keyfile/nms-keyfile-utils.h
++++ b/src/core/settings/plugins/keyfile/nms-keyfile-utils.h
+@@ -69,6 +69,7 @@
+                                                   GError           **error);
+ 
+ #if WITH_NETPLAN
++gboolean nms_keyfile_utils_use_netplan(void);
+ gboolean generate_netplan(const char* rootdir);
+ #endif
+ 
+--- a/src/core/settings/plugins/keyfile/nms-keyfile-utils.c
++++ b/src/core/settings/plugins/keyfile/nms-keyfile-utils.c
+@@ -403,18 +403,30 @@
+ 
+ #if WITH_NETPLAN
+ gboolean
++nms_keyfile_utils_use_netplan(void)
++{
++    return nm_streq(nm_config_get_os_id(), "ubuntu");
++}
++
++gboolean
+ generate_netplan(const char* rootdir)
+ {
+     /* TODO: call the io.netplan.Netplan.Generate() DBus method directly, after
+      * finding a way to pass the --root-dir parameter via DBus, to make it work
+      * inside NM's unit-tests where netplan needs to read & generate outside of
+      * /etc/netplan and /run/{systemd,NetworkManager} */
+-    const gchar *argv[] = { "/usr/libexec/netplan/configure", "--networkmanager-only", NULL , NULL, NULL };
++    const gchar *argv[] = { "/usr/libexec/netplan/configure", "--networkmanager-only", NULL, NULL, NULL };
++    gint status;
++
++    if (!g_file_test(argv[0], G_FILE_TEST_IS_EXECUTABLE)) {
++        argv[0] = "/usr/sbin/netplan";
++        argv[1] = "generate";
++    }
+     if (rootdir) {
+         argv[2] = "--root-dir";
+         argv[3] = rootdir;
+     }
+-    return g_spawn_sync(NULL, (gchar**)argv, NULL, G_SPAWN_SEARCH_PATH,
+-                        NULL, NULL, NULL, NULL, NULL, NULL);
++    return g_spawn_sync(NULL, (gchar**)argv, NULL, 0,
++                        NULL, NULL, NULL, NULL, &status, NULL) && status == 0;
+ }
+ #endif
+--- a/src/core/settings/plugins/keyfile/nms-keyfile-writer.c
++++ b/src/core/settings/plugins/keyfile/nms-keyfile-writer.c
+@@ -440,7 +440,7 @@
+     NetplanState  *np_state = NULL;
+ 
+     /* NETPLAN: write only non-temporary files to /etc/netplan/... */
+-    if (!is_volatile && !is_nm_generated && !is_external &&
++    if (nms_keyfile_utils_use_netplan() && !is_volatile && !is_nm_generated && !is_external &&
+         strstr(keyfile_dir, "/etc/NetworkManager/system-connections")) {
+         g_autofree gchar *ssid = g_key_file_get_string(kf_file, "wifi", "ssid", NULL);
+         g_autofree gchar *escaped_ssid = ssid ?
+--- a/src/core/settings/plugins/keyfile/nms-keyfile-plugin.c
++++ b/src/core/settings/plugins/keyfile/nms-keyfile-plugin.c
+@@ -314,7 +314,7 @@
+ 
+     #if WITH_NETPLAN
+     // Handle all netplan generated connections via STORAGE_TYPE_ETC, as they live in /etc/netplan
+-    if (g_str_has_prefix(filename, "netplan-"))
++    if (nms_keyfile_utils_use_netplan() && g_str_has_prefix(filename, "netplan-"))
+         storage_type = NMS_KEYFILE_STORAGE_TYPE_ETC;
+     #endif
+ 
+@@ -594,7 +594,8 @@
+     int i;
+ 
+     #if WITH_NETPLAN
+-    generate_netplan(NULL);
++    if (nms_keyfile_utils_use_netplan())
++        generate_netplan(NULL);
+     #endif
+     _load_dir(self, NMS_KEYFILE_STORAGE_TYPE_RUN, priv->dirname_run, &storages_new);
+     if (priv->dirname_etc)
+@@ -1058,12 +1059,20 @@
+     uuid              = nms_keyfile_storage_get_uuid(storage);
+ 
+     #if WITH_NETPLAN
+-    nm_auto_unref_keyfile GKeyFile *key_file = NULL;
+-    key_file = g_key_file_new ();
+-    if (!g_key_file_load_from_file (key_file, previous_filename, G_KEY_FILE_NONE, error))
+-        return FALSE;
+-    g_autofree gchar* ssid = NULL;
+-    ssid = g_key_file_get_string(key_file, "wifi", "ssid", NULL);
++    gs_free char *netplan_id = NULL;
++
++    if (nms_keyfile_utils_use_netplan()) {
++        nm_auto_unref_keyfile GKeyFile *key_file = g_key_file_new();
++        gs_free char *ssid = NULL;
++        gsize size = strlen(previous_filename) + 1;
++
++        if (!g_key_file_load_from_file(key_file, previous_filename, G_KEY_FILE_NONE, error))
++            return FALSE;
++        ssid = g_key_file_get_string(key_file, "wifi", "ssid", NULL);
++        netplan_id = g_malloc0(size);
++        if (netplan_get_id_from_nm_filepath(previous_filename, ssid, netplan_id, size) <= 0)
++            nm_clear_g_free(&netplan_id);
++    }
+     #endif
+ 
+     if (!NM_IN_SET(storage->storage_type,
+@@ -1092,12 +1101,7 @@
+         operation_message = "deleted from disk";
+ 
+     #if WITH_NETPLAN
+-    g_autofree gchar *netplan_id = NULL;
+-    ssize_t           netplan_id_size = 0;
+-
+-    netplan_id = g_malloc0(strlen(previous_filename));
+-    netplan_id_size = netplan_get_id_from_nm_filepath(previous_filename, ssid, netplan_id, strlen(previous_filename) - 1);
+-    if (netplan_id_size > 0) {
++    if (success && netplan_id) {
+         _LOGI ("deleting netplan connection: %s", netplan_id);
+         netplan_delete_connection(netplan_id, NULL);
+         generate_netplan(NULL);

@@ -1,0 +1,111 @@
+Description: Install a matching NetworkManager module for each supported pppd ABI
+ pppd loads plugins by basename from its version-specific directory and
+ checks their pppd_version symbol. Use each target's ppp-dev headers for
+ the module that pppd loads. The NetworkManager daemon and its internal
+ PPP library can then use the same Noble build on all marble images.
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2026-11-27
+
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -36,6 +36,7 @@
+ option('ppp', type: 'boolean', value: true, description: 'enable PPP/PPPoE support')
+ option('pppd', type: 'string', value: '', description: 'path to pppd binary')
+ option('pppd_plugin_dir', type: 'string', value: '', description: 'path to the pppd plugins directory')
++option('pppd_extra_versions', type: 'array', value: [], description: 'additional pppd ABIs with headers in debian/ppp-headers')
+ option('modem_manager', type: 'boolean', value: true, description: 'Enable new ModemManager1 interface support')
+ option('mobile_broadband_provider_info_database', type: 'string', value: '', description: 'path to the mobile-broadband-provider-info database')
+ option('ofono', type: 'boolean', value: false, description: 'Enable oFono support (experimental)')
+--- a/src/core/ppp/meson.build
++++ b/src/core/ppp/meson.build
+@@ -1,31 +1,31 @@
+ # SPDX-License-Identifier: LGPL-2.1-or-later
+ 
+-nm_pppd_plugin = shared_module(
+-  'nm-pppd-plugin',
+-  name_prefix: '',
+-  sources: [
+-    'nm-pppd-compat.c',
+-    'nm-pppd-plugin.c',
+-  ],
+-  include_directories: [
+-    src_inc,
+-    top_inc,
+-  ],
+-  dependencies: [
+-    libnm_core_public_dep,
+-    glib_dep,
+-    pppd_dep,
+-  ],
+-  link_with: [
+-    libnm_core_impl,
+-    libnm_log_null,
+-    libnm_glib_aux,
+-    libnm_std_aux,
+-    libc_siphash,
+-  ],
+-  install: true,
+-  install_dir: pppd_plugin_dir,
+-)
++foreach abi : [pppd_version] + get_option('pppd_extra_versions')
++  plugin_name = 'nm-pppd-plugin'
++  plugin_dir = pppd_plugin_dir
++  plugin_includes = [src_inc, top_inc]
++  plugin_deps = [libnm_core_public_dep, glib_dep]
++  if abi == pppd_version
++    plugin_deps += pppd_dep
++  else
++    plugin_name += '-' + abi
++    plugin_dir = join_paths(fs.parent(pppd_plugin_dir), abi)
++    plugin_includes += include_directories('../../../debian/ppp-headers/' + abi + '/usr/include')
++    install_symlink('nm-pppd-plugin.so',
++                    pointing_to: plugin_name + '.so',
++                    install_dir: plugin_dir)
++  endif
++  shared_module(
++    plugin_name,
++    name_prefix: '',
++    sources: ['nm-pppd-compat.c', 'nm-pppd-plugin.c'],
++    include_directories: plugin_includes,
++    dependencies: plugin_deps,
++    link_with: [libnm_core_impl, libnm_log_null, libnm_glib_aux, libnm_std_aux, libc_siphash],
++    install: true,
++    install_dir: plugin_dir,
++  )
++endforeach
+ 
+ linker_script = join_paths(meson.current_source_dir(), 'nm-ppp-plugin.ver')
+ 
+--- a/src/core/ppp/nm-pppd-compat.c
++++ b/src/core/ppp/nm-pppd-compat.c
+@@ -72,10 +72,6 @@
+ #include <dlfcn.h>
+ 
+ #include "nm-ppp-status.h"
+-
+-/*****************************************************************************/
+-
+-G_STATIC_ASSERT(PPP_VERSION_2_5_OR_NEWER == NM_PPP_VERSION_2_5_OR_NEWER);
+ 
+ /*****************************************************************************/
+ 
+--- a/src/core/ppp/nm-ppp-manager.c
++++ b/src/core/ppp/nm-ppp-manager.c
+@@ -39,7 +39,6 @@
+ #include "nm-ppp-plugin-api.h"
+ #include "nm-ppp-status.h"
+ 
+-#define NM_PPPD_PLUGIN PPPD_PLUGIN_DIR "/nm-pppd-plugin.so"
+ 
+ static NM_CACHED_QUARK_FCN("ppp-manager-secret-tries", ppp_manager_secret_tries_quark);
+ 
+@@ -948,7 +947,7 @@
+     nm_strv_ptrarray_add_string_dup(cmd, nm_dbus_object_get_path(NM_DBUS_OBJECT(self)));
+ 
+     nm_strv_ptrarray_add_string_dup(cmd, "plugin");
+-    nm_strv_ptrarray_add_string_dup(cmd, NM_PPPD_PLUGIN);
++    nm_strv_ptrarray_add_string_dup(cmd, "nm-pppd-plugin.so");
+ 
+     if (pppoe && nm_setting_pppoe_get_parent(pppoe)) {
+         static int unit;

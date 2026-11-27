@@ -1,0 +1,305 @@
+Description: Build the arm64 runtime on Ubuntu 24.04 for the marble images
+Origin: vendor
+Forwarded: not-needed
+Last-Update: 2026-11-27
+
+--- a/debian/copyright
++++ b/debian/copyright
+@@ -6,6 +6,11 @@
+ Copyright: 2004 - 2019 Red Hat, Inc.
+            2005 - 2009 Novell, Inc.
+ License: GPL-2+
++
++Files: libndp/*
++Copyright: 2013-2015 Jiri Pirko <jiri@resnulli.us>
++License: LGPL-2.1+
++Comment: The daemon links libndp statically to provide PREF64 on Ubuntu 24.04.
+ 
+ Files: src/lib*
+ Copyright: 2005 - 2019 Red Hat, Inc.
+--- a/debian/control
++++ b/debian/control
+@@ -3,9 +3,8 @@
+ Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+ XSBC-Original-Maintainer: Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.org>
+ Uploaders: Michael Biebl <biebl@debian.org>
+-Build-Depends: debhelper-compat (= 14),
++Build-Depends: debhelper-compat (= 13),
+                dh-sequence-gir,
+-               dh-sequence-installsysusers,
+                meson (>= 0.51.0),
+                pkgconf,
+                gettext (>= 0.19.8),
+@@ -18,17 +17,16 @@
+                systemd-dev,
+                libsystemd-dev (>= 209),
+                libudev-dev (>= 175),
+-               gir1.2-gio-2.0-dev,
++               libgirepository1.0-dev,
+                gir1.2-girepository-2.0,
+                gir1.2-girepository-2.0-dev,
+                gobject-introspection,
+                python3-gi,
+                libpsl-dev (>= 0.1),
+-               libcurl4-gnutls-dev (>= 7.24.0),
++               libcurl4-openssl-dev (>= 7.24.0),
+                gtk-doc-tools,
+                libglib2.0-doc,
+                libmm-glib-dev (>=  0.7.991),
+-               libndp-dev (>= 1.9),
+                libreadline-dev,
+                libnewt-dev (>= 0.52.15),
+                libteam-dev (>= 1.9),
+@@ -44,11 +42,13 @@
+                python3-pexpect <!nocheck>,
+                iproute2 <!nocheck>,
+                libbpf-dev (>= 1.3.0) [!i386],
+-               gcc-bpf (>= 13.1.0) [!i386],
+-               bpftool (>= 5.13) [!i386],
++               clang,
++               llvm,
++               linux-tools-generic,
++               libtool,
+                libyaml-dev [!i386],
+-               libnetplan-dev (>= 1.2~) [!i386],
+-               netplan.io (>= 1.2~) [!i386] <!nocheck>,
++               libnetplan-dev (>= 1.0) [!i386],
++               netplan.io (>= 1.0) [!i386] <!nocheck>,
+ Standards-Version: 4.7.4
+ XS-Debian-Vcs-Git: https://salsa.debian.org/utopia-team/network-manager.git
+ XS-Debian-Vcs-Browser: https://salsa.debian.org/utopia-team/network-manager
+@@ -58,8 +58,9 @@
+ 
+ Package: network-manager
+ Architecture: linux-any
+-Depends: libnm0 (= ${binary:Version}),
+-         netplan.io (>= 1.2~) [!i386],
++Depends: ${misc:Depends}, ${shlibs:Depends},
++         libnm0 (= ${binary:Version}),
++         netplan.io (>= 1.0) [!i386],
+          default-dbus-system-bus | dbus-system-bus,
+ Recommends: ppp,
+             dnsmasq-base,
+@@ -95,7 +96,8 @@
+ 
+ Package: network-manager-tui
+ Architecture: linux-any
+-Depends: libnm0 (= ${binary:Version}),
++Depends: ${misc:Depends}, ${shlibs:Depends},
++         libnm0 (= ${binary:Version}),
+ Breaks: network-manager (<< 1.56.0-4~)
+ Replaces: network-manager (<< 1.56.0-4~)
+ Description: NetworkManager curses-based UI
+@@ -105,14 +107,16 @@
+ 
+ Package: network-manager-ovs
+ Architecture: linux-any
+-Depends: libnm0 (= ${binary:Version}),
++Depends: ${misc:Depends}, ${shlibs:Depends},
++         libnm0 (= ${binary:Version}),
+ Recommends: openvswitch-switch,
+ Description: Open vSwitch device plugin for NetworkManager
+  This package contains NetworkManager support for Open vSwitch bridges.
+ 
+ Package: network-manager-team
+ Architecture: linux-any
+-Depends: libnm0 (= ${binary:Version}),
++Depends: ${misc:Depends}, ${shlibs:Depends},
++         libnm0 (= ${binary:Version}),
+ Recommends: libteam-utils,
+ Breaks: network-manager (<< 1.56.0-3~)
+ Replaces: network-manager (<< 1.56.0-3~)
+@@ -123,6 +127,7 @@
+ Section: devel
+ Architecture: all
+ Multi-Arch: foreign
++Depends: ${misc:Depends}
+ Description: network management framework (development files)
+  This package provides documentation of the NetworkManager D-Bus API, the
+  configuration formats and command line utilities.
+@@ -134,6 +139,7 @@
+ Multi-Arch: foreign
+ Breaks: network-manager (<< 1.52.0-3~)
+ Replaces: network-manager (<< 1.52.0-3~)
++Depends: ${misc:Depends}
+ Description: network management framework (translation files)
+  This package provides translations for messages of the programs found in the
+  network-manager package.
+@@ -142,6 +148,7 @@
+ Section: libs
+ Architecture: linux-any
+ Multi-Arch: same
++Depends: ${misc:Depends}, ${shlibs:Depends}
+ Description: GObject-based client library for NetworkManager
+  NetworkManager is a system network service that manages your network devices
+  and connections, attempting to keep active network connectivity when
+@@ -156,7 +163,8 @@
+ Section: libdevel
+ Architecture: linux-any
+ Multi-Arch: same
+-Depends: libnm0 (= ${binary:Version}),
++Depends: ${misc:Depends}, gir1.2-nm-1.0 (= ${binary:Version}),
++         libnm0 (= ${binary:Version}),
+          libglib2.0-dev
+ Description: GObject-based client library for NetworkManager (development files)
+  NetworkManager is a system network service that manages your network devices
+@@ -171,6 +179,7 @@
+ Section: introspection
+ Architecture: linux-any
+ Multi-Arch: same
++Depends: ${misc:Depends}, ${gir:Depends}, ${shlibs:Depends}
+ Description: GObject introspection data for the libnm library
+  NetworkManager is a system network service that manages your network devices
+  and connections, attempting to keep active network connectivity when
+@@ -184,23 +193,6 @@
+  dynamic bindings.
+ 
+ Package: network-manager-config-connectivity-debian
+-Architecture: all
+-Multi-Arch: foreign
+-Depends: network-manager (>= ${source:Version})
+-Description: NetworkManager configuration to enable connectivity checking
+- This package contains a configuration file which enables NetworkManager's
+- connectivity checking functionality.
+- .
+- NetworkManager will try to connect to a Debian server to determine the
+- connection status.
+- .
+- This is particularly useful for captive portal detection.
+- .
+- No user data is transmitted in the connectivity checks, but merely contacting
+- the Debian connectivity check servers reveals that the user is running a
+- Debian(-based) operating system with NetworkManager.
+-
+-Package: network-manager-config-connectivity-ubuntu
+ Architecture: all
+ Multi-Arch: foreign
+ Depends: ${misc:Depends},
+@@ -209,6 +201,24 @@
+  This package contains a configuration file which enables NetworkManager's
+  connectivity checking functionality.
+  .
++ NetworkManager will try to connect to a Debian server to determine the
++ connection status.
++ .
++ This is particularly useful for captive portal detection.
++ .
++ No user data is transmitted in the connectivity checks, but merely contacting
++ the Debian connectivity check servers reveals that the user is running a
++ Debian(-based) operating system with NetworkManager.
++
++Package: network-manager-config-connectivity-ubuntu
++Architecture: all
++Multi-Arch: foreign
++Depends: ${misc:Depends},
++         network-manager (>= ${source:Version})
++Description: NetworkManager configuration to enable connectivity checking
++ This package contains a configuration file which enables NetworkManager's
++ connectivity checking functionality.
++ .
+  NetworkManager will try to connect to an Ubuntu server to determine the
+  connection status.
+  .
+--- a/debian/rules
++++ b/debian/rules
+@@ -20,12 +20,13 @@
+ PPPD_PLUGIN_DIR := $(shell dh_ppp --plugin-dir)
+ 
+ %:
+-	dh $@ --with ppp $(BUILD_PACKAGES)
++	dh $@ --with installsysusers $(BUILD_PACKAGES)
+ 
+ override_dh_auto_configure:
+ 	dh_auto_configure -- \
+ 		-Druntime_dir=/run \
+ 		-Dpppd_plugin_dir=$(PPPD_PLUGIN_DIR) \
++		-Dpppd_extra_versions=$(shell ls -1 debian/ppp-headers | paste -sd, -) \
+ 		-Dpppd=/usr/sbin/pppd \
+ 		-Dresolvconf=/usr/sbin/resolvconf \
+ 		-Dmodprobe=/usr/sbin/modprobe \
+@@ -64,21 +65,12 @@
+ 		-Dqt=false \
+ 		-Debpf=false \
+ 		$(CLAT) \
+-		-Dbpf-compiler=gcc \
++		-Dbpf-compiler=clang \
+ 		-Dnbft=false \
+ 		-Dtests=yes \
+-		-Db_lto=true \
++		-Db_lto=false \
+ 		$(NETPLAN) \
+ 		-Dofono=true
+-
+-execute_before_dh_auto_build:
+-	# Current blhc complains about various hardening options not passed to
+-	# bpf-gcc. But bpf-gcc does not support some of them (-fstack-protector
+-	# and -fcf-protection=full for example). Also it complains about missing
+-	# -g, where in fact bpf-gcc is called with -gbpf, but blhc does not
+-	# recognize it.
+-	# See https://bugs.debian.org/1144478 for more details.
+-	@echo 'blhc: ignore-line-regexp: \[[0-9]+/[0-9]+\] /usr/bin/bpf-gcc .+'
+ 
+ execute_after_dh_auto_install:
+ 	# Those initrd specific services are not actually used by dracut and
+@@ -96,9 +88,6 @@
+ 	dh_installsystemd -pnetwork-manager --no-start NetworkManager-dispatcher.service NetworkManager-wait-online.service nm-priv-helper.service
+ 	dh_installsystemd -pnetwork-manager --no-also NetworkManager.service
+ 
+-override_dh_ppp:
+-	dh_ppp --breaks
+-
+ override_dh_auto_test:
+ 	# workaround for slower architectures like hppa, see #1075915
+ 	dh_auto_test -- --timeout-multiplier 2
+--- a/debian/network-manager.postinst
++++ b/debian/network-manager.postinst
+@@ -53,7 +53,7 @@
+ # Run "Netplan Everywhere" migration after debhelper (re-)started
+ # NetworkManager.service for us. On every package upgrade.
+ DIR="/etc/NetworkManager/system-connections"
+-if [ "$1" = "configure" ] && [ -d "$DIR" ]; then
++if [ "$1" = "configure" ] && [ -d "$DIR" ] && (. /etc/os-release && [ "$ID" = ubuntu ]); then
+     mkdir -p /run/netplan/nm-migrate
+     for CON in /etc/NetworkManager/system-connections/*; do
+         TYPE=$(file -bi "$CON" | cut -s -d ";" -f 1)
+--- a/debian/NetworkManager.conf
++++ b/debian/NetworkManager.conf
+@@ -3,6 +3,3 @@
+ 
+ [ifupdown]
+ managed=false
+-
+-[device]
+-wifi.scan-rand-mac-address=no
+--- /dev/null
++++ b/debian/10-wifi-scan.conf
+@@ -0,0 +1,5 @@
++[.config]
++enable=env:ubuntu
++
++[device]
++wifi.scan-rand-mac-address=no
+--- a/debian/10-globally-managed-devices.conf
++++ b/debian/10-globally-managed-devices.conf
+@@ -1,2 +1,5 @@
++[.config]
++enable=env:ubuntu
++
+ [keyfile]
+ unmanaged-devices=*,except:type:wifi,except:type:gsm,except:type:cdma
+--- a/debian/10-default-firewall-use-iptables.conf
++++ b/debian/10-default-firewall-use-iptables.conf
+@@ -1,2 +1,5 @@
++[.config]
++enable=env:ubuntu
++
+ [main]
+ firewall-backend = iptables
+--- a/debian/default-wifi-powersave-on.conf
++++ b/debian/default-wifi-powersave-on.conf
+@@ -1,2 +1,5 @@
++[.config]
++enable=env:ubuntu
++
+ [connection]
+ wifi.powersave = 3

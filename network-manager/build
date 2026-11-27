@@ -1,0 +1,70 @@
+#!/bin/sh
+set -eu
+
+overlay=$(dirname "$(realpath "$0")")
+output=$(realpath -m "${1:-out}")
+cache=$(realpath -m "${RUNNER_TEMP:-$PWD}/build/network-manager")
+ubuntu_version=$(dpkg-parsechangelog -l "$overlay/debian/changelog" -S Version)
+ubuntu_version=${ubuntu_version%+marble*}
+ubuntu=https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/network-manager/$ubuntu_version
+snapshot=https://snapshot.debian.org/archive/debian/20261119T000000Z/pool/main
+
+mkdir -p "$output" "$cache"
+cd "$cache"
+while read -r digest archive; do
+    case "$archive" in
+        network-manager_*) pool=$ubuntu ;;
+        libndp_*) pool=$snapshot/libn/libndp ;;
+        ppp-dev_*) pool=$snapshot/p/ppp ;;
+    esac
+    if ! printf '%s  %s\n' "$digest" "$archive" | sha256sum --check --status 2>/dev/null; then
+        /usr/lib/apt/apt-helper download-file "$pool/$archive" "$archive" "SHA256:$digest"
+    fi
+done < "$overlay/SHA256SUMS"
+
+work=$(mktemp -d "$cache/build.XXXXXXXX")
+trap 'rm -rf "$work"' EXIT
+cd "$work"
+dpkg-source -x "$cache/network-manager_${ubuntu_version}.dsc" src
+cd src
+patch -p1 < "$overlay/packaging-noble.patch"
+cp "$overlay"/debian/patches/*.patch debian/patches/
+cat "$overlay/debian/patches/series" >> debian/patches/series
+{
+    cat "$overlay/debian/changelog"
+    printf '\n'
+    cat debian/changelog
+} > debian/changelog.marble
+mv debian/changelog.marble debian/changelog
+mkdir -p debian/ppp-headers
+for archive in "$cache"/ppp-dev_*.deb; do
+    version=$(dpkg-deb -f "$archive" Version)
+    dpkg-deb -x "$archive" "debian/ppp-headers/${version%%-*}"
+done
+dpkg-checkbuilddeps || apt-get build-dep -y --no-install-recommends .
+
+# CLAT uses the PREF64 router advertisement API added in libndp 1.9.
+# Build the static library with the same compiler and libc as NetworkManager.
+mkdir "$work/libndp"
+tar -xf "$cache"/libndp_*.orig.tar.gz -C "$work/libndp" --strip-components=1
+(
+    cd "$work/libndp"
+    autoreconf -fi
+    ./configure --prefix="$work/ndp" --disable-shared --enable-static --with-pic
+    make
+    make install
+)
+export PKG_CONFIG_PATH="$work/ndp/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+# Ubuntu's /usr/sbin/bpftool wrapper expects the running kernel's tools.
+# Use the executable provided by the Noble build dependency in containers.
+tools_pkg=$(dpkg-query -W -f='${Depends}' linux-tools-generic)
+bpftool=$(dpkg-query -L "$tools_pkg" | grep '/bpftool$')
+export PATH="$(dirname "$bpftool"):$PATH"
+dpkg-buildpackage -b -us -uc
+
+version=$(dpkg-parsechangelog -S Version)
+arch=$(dpkg --print-architecture)
+for name in network-manager libnm0 libnm-dev gir1.2-nm-1.0 network-manager-tui network-manager-ovs network-manager-team; do
+    cp "$work/${name}_${version}_${arch}.deb" "$output/"
+done
+cp "$work/network-manager-l10n_${version}_all.deb" "$output/"

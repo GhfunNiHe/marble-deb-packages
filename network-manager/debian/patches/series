@@ -1,1 +1,3 @@
 wwan-disconnect-owned-bearer.patch
+netplan-runtime-backend.patch
+pppd-plugin-abis.patch
