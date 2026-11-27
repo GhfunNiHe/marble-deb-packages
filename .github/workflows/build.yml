@@ -37,7 +37,6 @@ on:
       - 'callaudiod/**'
       - 'iio-sensor-proxy-ssc/**'
       - 'hexagonrpc/**'
-      - 'libva-v4l2/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
     inputs:
@@ -149,7 +148,8 @@ jobs:
             gtk-doc-tools gi-docgen help2man valac xsltproc systemd-dev \
             bash-completion gettext libdbus-1-dev dbus polkitd \
             python3-dbus python3-dev python3-gi libglib2.0-doc \
-            libva-dev libdrm-dev libegl-dev libgles-dev libgbm-dev
+            libva-dev libdrm-dev libegl-dev libgles-dev libgbm-dev \
+            libvulkan-dev ffmpeg
 
       # Noble's archive is below ModemManager's 1.32 floor. Take the
       # unmodified libmbim build from the dedicated release; keep it in
@@ -391,16 +391,17 @@ jobs:
              "$RUNNER_TEMP/build"/libhexagonrpc0.4_*.deb \
              "$GITHUB_WORKSPACE/out/"
 
-      # libva-v4l2: Iris VA-API backend from the FFT-infra fork.
-      - name: "Build: libva-v4l2"
+      # libva-v4l2-iris: Iris VA-API backend from the FFT-infra fork. Keep
+      # upstream's debian/ and package name; its install helper already
+      # provides the msm_drv_video.so alias.
+      - name: "Build: libva-v4l2-iris"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/libva-v4l2.tar.gz" "$SRC_LIBVA_URL"
           mkdir -p "$RUNNER_TEMP/build/libva-v4l2"
           tar -xf "$RUNNER_TEMP/build/libva-v4l2.tar.gz" -C "$RUNNER_TEMP/build/libva-v4l2" --strip-components=1
-          cp -a "$GITHUB_WORKSPACE/libva-v4l2/debian" "$RUNNER_TEMP/build/libva-v4l2/debian"
           cd "$RUNNER_TEMP/build/libva-v4l2"
           dpkg-buildpackage -b -us -uc
-          cp "$RUNNER_TEMP/build"/libva-v4l2_*.deb "$GITHUB_WORKSPACE/out/"
+          cp "$RUNNER_TEMP/build"/libva-v4l2-iris_*.deb "$GITHUB_WORKSPACE/out/"
 
       - name: Upload DEBs
         uses: actions/upload-artifact@v7

@@ -1,2 +1,0 @@
-debian/env/60-libva-v4l2.conf usr/lib/environment.d
-debian/env/libva-v4l2.sh etc/profile.d
