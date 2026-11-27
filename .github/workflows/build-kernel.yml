@@ -78,7 +78,7 @@ jobs:
             ccache-marble-
 
       - name: Prepare kernel build
-        run: sh linux-xiaomi-marble/ci/prepare-build
+        uses: ./.github/actions/prepare-kernel
 
       - name: Build kernel
         run: |
@@ -116,11 +116,30 @@ jobs:
           fi
 
           dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify"
-          sh linux-xiaomi-marble/ci/verify-camera-modules "$RUNNER_TEMP/verify" "$KREL"
           if ! file "$RUNNER_TEMP/verify/boot/vmlinuz-$KREL" | grep -q 'ARM64 boot executable Image'; then
             echo "FAIL: vmlinuz is not an uncompressed arm64 Image"; exit 1
           fi
           echo "kernel deb verified: $DEB"
+
+      - name: Verify camera modules in linux-xiaomi-marble
+        run: |
+          root="$RUNNER_TEMP/verify/usr"
+          modules="$root/lib/modules/$KREL"
+          for file in \
+            kernel/drivers/clk/qcom/camcc-sm8450.ko.zst \
+            kernel/drivers/media/platform/qcom/camss/qcom-camss.ko.zst \
+            kernel/drivers/media/i2c/gc02m1.ko.zst \
+            kernel/drivers/media/i2c/imx355.ko.zst \
+            kernel/drivers/media/i2c/s5k3p9.ko.zst \
+            updates/v4l2loopback.ko.zst
+          do
+            vermagic=$(modinfo -F vermagic "$modules/$file")
+            if [ "${vermagic%% *}" != "$KREL" ]; then
+              echo "FAIL: $file has vermagic '$vermagic', expected kernel $KREL" >&2
+              exit 1
+            fi
+          done
+          test -s "$root/share/doc/linux-xiaomi-marble/v4l2loopback.copyright"
 
       - name: Upload DEB
         uses: actions/upload-artifact@v7

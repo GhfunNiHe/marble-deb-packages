@@ -1,0 +1,27 @@
+name: Prepare kernel sources
+description: Install the pinned v4l2loopback source and prepare the selected marble kernel for dpkg-buildpackage.
+runs:
+  using: composite
+  steps:
+    - name: Install v4l2loopback build source
+      shell: sh
+      run: |
+        source_deb="$RUNNER_TEMP/v4l2loopback-source.deb"
+        wget -q -O "$source_deb" https://snapshot.debian.org/file/13f5086f76dceaec2280eb26bcb9a5c265f3d5e2
+        echo "b10127adb568103ec5e273ffcce745da70b959098275f43c65b67f44f3fa44d8  $source_deb" | sha256sum -c -
+        apt-get install -y --no-install-recommends "$source_deb"
+
+    - name: Check out kernel source and overlay Debian packaging
+      shell: sh
+      run: |
+        src="$RUNNER_TEMP/build/kernel-src/linux-marble"
+        objects="$RUNNER_TEMP/build/kernel.git"
+        mkdir -p "$src"
+        git init -q --bare "$objects"
+        GIT_TERMINAL_PROMPT=0 timeout 15m git --git-dir="$objects" fetch --depth=1 --no-tags -- "$SRC_KERNEL_REPO" "$SRC_KERNEL_REF"
+        commit=$(git --git-dir="$objects" rev-parse 'FETCH_HEAD^{commit}')
+        git --git-dir="$objects" --work-tree="$src" checkout -q "$commit" -- .
+        cp -a linux-xiaomi-marble/debian "$src/debian"
+        cp linux-xiaomi-marble/config-xiaomi-marble.aarch64 linux-xiaomi-marble/extra-kernel.config "$src/"
+        echo "KSRC=$src" >> "$GITHUB_ENV"
+        printf 'KERNEL_COMMIT_HASH=%.7s\n' "$commit" >> "$GITHUB_ENV"

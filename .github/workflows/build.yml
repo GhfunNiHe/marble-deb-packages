@@ -41,6 +41,7 @@ on:
       - 'iio-sensor-proxy-ssc/**'
       - 'hexagonrpc/**'
       - 'libva-v4l2/**'
+      - '.github/actions/prepare-kernel/action.yml'
       - '.github/workflows/build.yml'
   workflow_dispatch:
     inputs:
@@ -377,7 +378,7 @@ jobs:
           cp "$RUNNER_TEMP/build"/libva-v4l2_*.deb "$GITHUB_WORKSPACE/out/"
 
       - name: Prepare kernel build
-        run: sh linux-xiaomi-marble/ci/prepare-build
+        uses: ./.github/actions/prepare-kernel
 
       - name: "Build: linux-xiaomi-marble"
         run: |
@@ -414,7 +415,6 @@ jobs:
           fi
 
           dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify"
-          sh linux-xiaomi-marble/ci/verify-camera-modules "$RUNNER_TEMP/verify" "$KREL"
           if ! file "$RUNNER_TEMP/verify/boot/vmlinuz-$KREL" | grep -q 'ARM64 boot executable Image'; then
             echo "FAIL: vmlinuz is not an uncompressed arm64 Image"; exit 1
           fi
@@ -430,6 +430,26 @@ jobs:
           zstdcat "$IRIS" | strings | grep -q 'iris_hfi_gen2_set_decode_order_output' \
             || { echo "FAIL: iris decode-order patch is not in the built module"; exit 1; }
           echo "kernel deb verified: $DEB"
+
+      - name: Verify camera modules in linux-xiaomi-marble
+        run: |
+          root="$RUNNER_TEMP/verify/usr"
+          modules="$root/lib/modules/$KREL"
+          for file in \
+            kernel/drivers/clk/qcom/camcc-sm8450.ko.zst \
+            kernel/drivers/media/platform/qcom/camss/qcom-camss.ko.zst \
+            kernel/drivers/media/i2c/gc02m1.ko.zst \
+            kernel/drivers/media/i2c/imx355.ko.zst \
+            kernel/drivers/media/i2c/s5k3p9.ko.zst \
+            updates/v4l2loopback.ko.zst
+          do
+            vermagic=$(modinfo -F vermagic "$modules/$file")
+            if [ "${vermagic%% *}" != "$KREL" ]; then
+              echo "FAIL: $file has vermagic '$vermagic', expected kernel $KREL" >&2
+              exit 1
+            fi
+          done
+          test -s "$root/share/doc/linux-xiaomi-marble/v4l2loopback.copyright"
 
       # firmware: assert on the Bluetooth link btqca opens (shipped wrong once).
       - name: Verify firmware DEB
