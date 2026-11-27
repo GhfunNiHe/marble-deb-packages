@@ -1,3 +1,10 @@
+network-manager (1.58.1-1+marble2) noble; urgency=medium
+
+  * Raise the package revision above Debian forky's 1.58.1-1+b1 so upgrades
+    keep the mobile data disconnect fix.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 15:28:16 +0800
+
 network-manager (1.58.1-1ubuntu3.1+marble1) noble; urgency=medium
 
   * Build the common arm64 packages on Ubuntu 24.04. Keep each target
