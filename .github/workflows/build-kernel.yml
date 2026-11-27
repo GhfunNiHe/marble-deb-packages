@@ -1,13 +1,20 @@
 name: Build Kernel Deb
 
-# Standalone kernel build, manual trigger only: 30-90 min even with a warm ccache.
+# Standalone kernel build, triggered by kernel packaging pushes: 30-90 min even with a warm ccache.
 # Same layout contract as build.yml: vmlinuz + DTB in /boot, no initramfs, ESP synced by postinst.
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'linux-xiaomi-marble/**'
+      - '.github/workflows/build-kernel.yml'
   workflow_dispatch:
     inputs:
-      prerelease:
-        description: 'Publish as a prerelease (untick to publish a full release)'
+      # 默认勾选：上传正式 Release；取消勾选：上传 Pre-Release。
+      release:
+        description: '上传 Release（取消勾选则上传 Pre-Release）'
         type: boolean
         default: true
       # 默认使用 marble 项目的内核仓库及其设备分支。
@@ -20,7 +27,7 @@ on:
         type: string
         default: 'marble-7.2'
 
-# Source parameters: repo URL and optional ref, empty ref keeps the default.
+# Source parameters: repo URL and ref (branch, tag or commit), empty ref keeps the default.
 env:
   SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/GhfunNiHe/linux-marble' }}
   SRC_KERNEL_REF: ${{ inputs.kernel_src_ref || 'marble-7.2' }}
@@ -78,8 +85,26 @@ jobs:
             ccache-marble-${{ runner.os }}-${{ runner.arch }}-
             ccache-marble-
 
-      - name: Prepare kernel build
-        uses: ./.github/actions/prepare-kernel
+      # Inlined from the former .github/actions/prepare-kernel composite action.
+      - name: Install v4l2loopback build source
+        run: |
+          source_deb="$RUNNER_TEMP/v4l2loopback-source.deb"
+          wget -q -O "$source_deb" https://snapshot.debian.org/file/13f5086f76dceaec2280eb26bcb9a5c265f3d5e2
+          apt-get install -y --no-install-recommends "$source_deb"
+
+      - name: Check out kernel source and overlay Debian packaging
+        run: |
+          src="$RUNNER_TEMP/build/kernel-src/linux-marble"
+          objects="$RUNNER_TEMP/build/kernel.git"
+          mkdir -p "$src"
+          git init -q --bare "$objects"
+          GIT_TERMINAL_PROMPT=0 timeout 15m git --git-dir="$objects" fetch --depth=1 --no-tags -- "$SRC_KERNEL_REPO" "$SRC_KERNEL_REF"
+          commit=$(git --git-dir="$objects" rev-parse 'FETCH_HEAD^{commit}')
+          git --git-dir="$objects" --work-tree="$src" checkout -q "$commit" -- .
+          cp -a linux-xiaomi-marble/debian "$src/debian"
+          cp linux-xiaomi-marble/config-xiaomi-marble.aarch64 linux-xiaomi-marble/extra-kernel.config "$src/"
+          echo "KSRC=$src" >> "$GITHUB_ENV"
+          printf 'KERNEL_COMMIT_HASH=%.7s\n' "$commit" >> "$GITHUB_ENV"
 
       - name: Build kernel
         run: |
@@ -116,7 +141,7 @@ jobs:
           path: ~/.ccache
           key: ccache-marble-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
 
-  # Publish the kernel DEB: prerelease when the input is ticked, otherwise a full release.
+  # Publish the kernel DEB: push builds publish a full release; manual runs publish a prerelease only when the input is unticked.
   release:
     name: Create release
     needs: build
@@ -141,7 +166,7 @@ jobs:
           tag_name: kernel-deb-${{ env.SHORT_SHA }}
           name: Kernel linux-xiaomi-marble (${{ env.SHORT_SHA }})
           files: debs/**/*.deb
-          prerelease: ${{ inputs.prerelease }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && !inputs.release }}
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

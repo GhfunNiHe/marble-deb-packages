@@ -24,8 +24,6 @@ env:
   SRC_HEXAGONRPC_REF: ${{ inputs.hexagonrpc_src_ref || 'v0.4.0' }} # Sensor registry support
   SRC_LIBVA_REPO: ${{ inputs.libva_src_repo || 'https://github.com/FFT-infra/qualcomm-iris-vaapi' }}
   SRC_LIBVA_REF: ${{ inputs.libva_src_ref || 'feat/encode-entrypoints' }}  # empty = feat/encode-entrypoints
-  SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/GhfunNiHe/linux-marble' }}
-  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref || 'marble-7.2' }}
 
 on:
   push:
@@ -33,7 +31,6 @@ on:
       - main
     paths:
       - 'network-manager/**'
-      - 'linux-xiaomi-marble/**'
       - 'marble-device-support/**'
       - 'firmware-xiaomi-marble/**'
       - 'libssc/**'
@@ -44,7 +41,6 @@ on:
       - 'iio-sensor-proxy-ssc/**'
       - 'hexagonrpc/**'
       - 'libva-v4l2/**'
-      - '.github/actions/prepare-kernel/action.yml'
       - '.github/workflows/build.yml'
   workflow_dispatch:
     inputs:
@@ -121,14 +117,6 @@ on:
         description: 'libva-v4l2 的 tag/分支/提交'
         type: string
         default: 'feat/encode-entrypoints'
-      kernel_src_repo:
-        description: 'linux-marble 内核源码仓库地址 (repo URL)'
-        type: string
-        default: 'https://github.com/GhfunNiHe/linux-marble'
-      kernel_src_ref:
-        description: 'linux-marble 的分支/tag/提交'
-        type: string
-        default: 'marble-7.2'
 
 # Rebuilds supersede each other; never queue them up.
 concurrency:
@@ -144,7 +132,7 @@ jobs:
       image: ubuntu:24.04
     env:
       DEB_BUILD_OPTIONS: nocheck
-      # 4G each: one kernel cache would otherwise evict everything.
+      # Shared ccache pool for the user-space packages.
       CCACHE_MAXSIZE: 4G
 
     steps:
@@ -154,9 +142,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             build-essential debhelper fakeroot dpkg-dev ccache git ca-certificates wget \
-            bc bison flex libssl-dev libelf-dev dwarves \
             rsync cpio kmod python3 zstd xz-utils lz4 alsa-utils \
-            clang lld llvm \
             ninja-build pkg-config file patch \
             libglib2.0-dev libprotobuf-c-dev libgstreamer-plugins-base1.0-dev \
             protobuf-compiler protobuf-c-compiler \
@@ -396,25 +382,6 @@ jobs:
           cd "$RUNNER_TEMP/build/libva-v4l2"
           dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/libva-v4l2_*.deb "$GITHUB_WORKSPACE/out/"
-
-      - name: Prepare kernel build
-        uses: ./.github/actions/prepare-kernel
-
-      - name: "Build: linux-xiaomi-marble"
-        run: |
-          cd "$KSRC"
-          dpkg-buildpackage -b -us -uc
-          echo "=== ccache stats ==="
-          ccache --show-stats
-
-          KREL=$(cat include/config/kernel.release)
-          # The .deb lands in the wrapper dir, not in $RUNNER_TEMP/build.
-          cp "$KSRC"/../*.deb "$GITHUB_WORKSPACE/out/"
-          {
-            echo "### Kernel build result"
-            echo ""
-            echo "- kernel release: \`${KREL}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload DEBs
         uses: actions/upload-artifact@v7
