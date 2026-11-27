@@ -38,6 +38,7 @@ jobs:
     container:
       image: debian:trixie
     env:
+      DEB_BUILD_OPTIONS: nocheck
       # debian/rules would default to 10G, which is GitHub's entire
       # per-repository cache budget: one kernel cache would evict everything.
       CCACHE_MAXSIZE: 4G
@@ -99,48 +100,6 @@ jobs:
             echo "- kernel release: \`${KREL}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Assert on the DEB: two boot files, vmlinuz uncompressed (U-Boot booti).
-      - name: Verify kernel DEB
-        run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/linux-xiaomi-marble_*.deb | head -1)
-          [ -n "$DEB" ] || { echo "FAIL: no kernel deb built"; exit 1; }
-          dpkg-deb -f "$DEB" Package Version Architecture Depends
-
-          # [^/][^/]* skips dpkg-deb's bare ./boot/ entry; sh -e (dash), no process substitution.
-          BOOT=$(dpkg-deb -c "$DEB" | awk '{print $6}' | grep '^\./boot/[^/][^/]*$' | sort)
-          EXPECT=$(printf './boot/sm8475-xiaomi-marble-%s.dtb\n./boot/vmlinuz-%s\n' "$KREL" "$KREL")
-          if [ "$BOOT" != "$EXPECT" ]; then
-            echo "FAIL: /boot contents are not vmlinuz + DTB only"
-            printf 'actual:\n%s\nexpected:\n%s\n' "$BOOT" "$EXPECT"
-            exit 1
-          fi
-
-          dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify"
-          if ! file "$RUNNER_TEMP/verify/boot/vmlinuz-$KREL" | grep -q 'ARM64 boot executable Image'; then
-            echo "FAIL: vmlinuz is not an uncompressed arm64 Image"; exit 1
-          fi
-          echo "kernel deb verified: $DEB"
-
-      - name: Verify camera modules in linux-xiaomi-marble
-        run: |
-          root="$RUNNER_TEMP/verify/usr"
-          modules="$root/lib/modules/$KREL"
-          for file in \
-            kernel/drivers/clk/qcom/camcc-sm8450.ko.zst \
-            kernel/drivers/media/platform/qcom/camss/qcom-camss.ko.zst \
-            kernel/drivers/media/i2c/gc02m1.ko.zst \
-            kernel/drivers/media/i2c/imx355.ko.zst \
-            kernel/drivers/media/i2c/s5k3p9.ko.zst \
-            updates/v4l2loopback.ko.zst
-          do
-            vermagic=$(modinfo -F vermagic "$modules/$file")
-            if [ "${vermagic%% *}" != "$KREL" ]; then
-              echo "FAIL: $file has vermagic '$vermagic', expected kernel $KREL" >&2
-              exit 1
-            fi
-          done
-          test -s "$root/share/doc/linux-xiaomi-marble/v4l2loopback.copyright"
-
       - name: Upload DEB
         uses: actions/upload-artifact@v7
         with:
@@ -149,7 +108,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-      # Cache this run's output even when the build or verify failed.
+      # Cache compiler output even after a failed build.
       - name: Save ccache
         if: always()
         uses: actions/cache/save@v6

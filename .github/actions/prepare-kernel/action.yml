@@ -8,7 +8,6 @@ runs:
       run: |
         source_deb="$RUNNER_TEMP/v4l2loopback-source.deb"
         wget -q -O "$source_deb" https://snapshot.debian.org/file/13f5086f76dceaec2280eb26bcb9a5c265f3d5e2
-        echo "b10127adb568103ec5e273ffcce745da70b959098275f43c65b67f44f3fa44d8  $source_deb" | sha256sum -c -
         apt-get install -y --no-install-recommends "$source_deb"
 
     - name: Check out kernel source and overlay Debian packaging

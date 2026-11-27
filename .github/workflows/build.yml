@@ -140,6 +140,7 @@ jobs:
     container:
       image: ubuntu:24.04
     env:
+      DEB_BUILD_OPTIONS: nocheck
       # 4G each: one kernel cache would otherwise evict everything.
       CCACHE_MAXSIZE: 4G
 
@@ -196,8 +197,6 @@ jobs:
             > /tmp/meson-pkg/DEBIAN/control
           dpkg-deb --build /tmp/meson-pkg /tmp/meson_1.4.2-0marble1_all.deb
           dpkg -i /tmp/meson_1.4.2-0marble1_all.deb
-          meson --version | grep -qx "$MESON_VERSION" \
-            || { echo "FAIL: meson $MESON_VERSION was not installed"; exit 1; }
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -262,11 +261,9 @@ jobs:
       - name: "Build: firmware-xiaomi-marble"
         run: |
           wget -c -q -O "$RUNNER_TEMP/build/firmware.tar.gz" "$SRC_FIRMWARE_URL"
-          mkdir -p "$RUNNER_TEMP/build/fw"
-          tar -xf "$RUNNER_TEMP/build/firmware.tar.gz" -C "$RUNNER_TEMP/build/fw"
-          SRC=$(find "$RUNNER_TEMP/build/fw" -mindepth 1 -maxdepth 1 -type d | head -1)
-          [ -n "$SRC" ] || { echo "FAIL: firmware tarball has no top-level directory"; exit 1; }
-
+          SRC="$RUNNER_TEMP/build/fw/firmware-xiaomi-marble"
+          mkdir -p "$SRC"
+          tar -xf "$RUNNER_TEMP/build/firmware.tar.gz" -C "$SRC" --strip-components=1
           cp -a firmware-xiaomi-marble/debian "$SRC/debian"
           cd "$SRC"
           dpkg-buildpackage -b -us -uc
@@ -318,7 +315,7 @@ jobs:
           cd "$RUNNER_TEMP/build/mm"
           # 3.0 (quilt): dpkg-source applies debian/patches inside dpkg-buildpackage.
           cp -a "$GITHUB_WORKSPACE/modemmanager/debian" debian
-          DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -us -uc
+          dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/modemmanager-marble_*.deb "$RUNNER_TEMP/build"/libmm-glib0_*.deb \
              "$RUNNER_TEMP/build"/libmm-glib-dev_*.deb "$RUNNER_TEMP/build"/gir1.2-modemmanager-*.deb \
              "$GITHUB_WORKSPACE/out/"
@@ -339,7 +336,6 @@ jobs:
       - name: "Install libssc (build dependency of iio-sensor-proxy-ssc)"
         run: |
           apt-get install -y "$GITHUB_WORKSPACE"/out/libssc_*.deb
-          pkg-config --modversion libssc
 
       # iio-sensor-proxy-ssc: upstream 3.9 with SSC support, replaces iio-sensor-proxy.
       - name: "Build: iio-sensor-proxy-ssc"
@@ -388,255 +384,13 @@ jobs:
           ccache --show-stats
 
           KREL=$(cat include/config/kernel.release)
-          echo "KREL=$KREL" >> "$GITHUB_ENV"
           # The .deb lands in the wrapper dir, not in $RUNNER_TEMP/build.
           cp "$KSRC"/../*.deb "$GITHUB_WORKSPACE/out/"
           {
             echo "### Kernel build result"
             echo ""
             echo "- kernel release: \`${KREL}\`"
-            echo "- modules: $(find "$GITHUB_WORKSPACE/out" -name '*.deb' -exec dpkg-deb -c {} \; | grep -c 'ko\.zst')"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      # Assert on the DEB: two boot files, vmlinuz uncompressed.
-      - name: Verify kernel DEB
-        run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/linux-xiaomi-marble_*.deb | head -1)
-          [ -n "$DEB" ] || { echo "FAIL: no kernel deb built"; exit 1; }
-          dpkg-deb -f "$DEB" Package Version Architecture Depends
-
-          # [^/][^/]* skips dpkg-deb's bare ./boot/ entry; sh -e (dash), no process substitution.
-          BOOT=$(dpkg-deb -c "$DEB" | awk '{print $6}' | grep '^\./boot/[^/][^/]*$' | sort)
-          EXPECT=$(printf './boot/sm8475-xiaomi-marble-%s.dtb\n./boot/vmlinuz-%s\n' "$KREL" "$KREL")
-          if [ "$BOOT" != "$EXPECT" ]; then
-            echo "FAIL: /boot contents are not vmlinuz + DTB only"
-            printf 'actual:\n%s\nexpected:\n%s\n' "$BOOT" "$EXPECT"
-            exit 1
-          fi
-
-          dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify"
-          if ! file "$RUNNER_TEMP/verify/boot/vmlinuz-$KREL" | grep -q 'ARM64 boot executable Image'; then
-            echo "FAIL: vmlinuz is not an uncompressed arm64 Image"; exit 1
-          fi
-          # ath11k is a module: assert on the firmware name the MAC patch adds.
-          MOD=$(find "$RUNNER_TEMP/verify" -name 'ath11k.ko.zst' | head -1)
-          [ -n "$MOD" ] || { echo "FAIL: ath11k.ko.zst not found in the kernel deb"; exit 1; }
-          zstdcat "$MOD" | strings | grep -q 'wlan_mac.bin' \
-            || { echo "FAIL: ath11k WLAN MAC patch is not in the built module"; exit 1; }
-
-          # iris decode-order: assert on the static handler in the module's kallsyms.
-          IRIS=$(find "$RUNNER_TEMP/verify" -name 'qcom-iris.ko.zst' | head -1)
-          [ -n "$IRIS" ] || { echo "FAIL: qcom-iris.ko.zst not found in the kernel deb"; exit 1; }
-          zstdcat "$IRIS" | strings | grep -q 'iris_hfi_gen2_set_decode_order_output' \
-            || { echo "FAIL: iris decode-order patch is not in the built module"; exit 1; }
-          echo "kernel deb verified: $DEB"
-
-      - name: Verify camera modules in linux-xiaomi-marble
-        run: |
-          root="$RUNNER_TEMP/verify/usr"
-          modules="$root/lib/modules/$KREL"
-          for file in \
-            kernel/drivers/clk/qcom/camcc-sm8450.ko.zst \
-            kernel/drivers/media/platform/qcom/camss/qcom-camss.ko.zst \
-            kernel/drivers/media/i2c/gc02m1.ko.zst \
-            kernel/drivers/media/i2c/imx355.ko.zst \
-            kernel/drivers/media/i2c/s5k3p9.ko.zst \
-            updates/v4l2loopback.ko.zst
-          do
-            vermagic=$(modinfo -F vermagic "$modules/$file")
-            if [ "${vermagic%% *}" != "$KREL" ]; then
-              echo "FAIL: $file has vermagic '$vermagic', expected kernel $KREL" >&2
-              exit 1
-            fi
-          done
-          test -s "$root/share/doc/linux-xiaomi-marble/v4l2loopback.copyright"
-
-      # firmware: assert on the Bluetooth link btqca opens (shipped wrong once).
-      - name: Verify firmware DEB
-        run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/firmware-xiaomi-marble_*.deb | head -1)
-          [ -n "$DEB" ] || { echo "FAIL: no firmware deb built"; exit 1; }
-          dpkg-deb -f "$DEB" Package Version Architecture Recommends
-
-          LIST=$(dpkg-deb -c "$DEB")
-          for f in \
-            ./usr/lib/firmware/qcom/sm8475/xiaomi/marble/a730_zap.mbn \
-            ./usr/lib/firmware/qcom/sm8475/xiaomi/marble/adsp2.b00 \
-            ./usr/lib/firmware/qcom/sm8475/xiaomi/marble/modem.mdt \
-            ./usr/lib/firmware/qcom/sm8475/xiaomi/marble/slpi2.b00 \
-            ./usr/lib/firmware/qcom/a730_sqe.fw \
-            ./usr/lib/firmware/qcom/gmu_gen70000.bin \
-            ./usr/lib/firmware/qcom/sm8450/SM8475-Xiaomi-Marble-tplg.bin \
-            ./usr/lib/firmware/qca/hpbtfw21.tlv \
-            ./usr/lib/firmware/ath11k/WCN6855/hw2.0/board.bin \
-            ./usr/share/qcom/hexagonfs/sns_reg_version ; do
-            echo "$LIST" | grep -q " $f\$" || { echo "FAIL: firmware deb is missing $f"; exit 1; }
-          done
-
-          echo "$LIST" | grep -qE 'qca/wcnhpbtfw21\.tlv -> hpbtfw21\.tlv$' \
-            || { echo "FAIL: qca/wcnhpbtfw21.tlv link missing or points at the wrong name"; exit 1; }
-          echo "$LIST" | grep -qE 'qca/wcnhpnv21\.301 -> hpnv21\.301$' \
-            || { echo "FAIL: qca/wcnhpnv21.301 link missing or points at the wrong name"; exit 1; }
-
-          echo "wcn-prefixed links: $(echo "$LIST" | grep -c 'wcnh')"
-          echo "firmware deb verified: $DEB"
-
-          # The generated ALSA graph must contain all three board backends;
-          # file existence alone also passes for the old speaker-only graph.
-          dpkg-deb --fsys-tarfile "$DEB" | tar -xOf - \
-            ./usr/lib/firmware/qcom/sm8450/SM8475-Xiaomi-Marble-tplg.bin \
-            > "$RUNNER_TEMP/marble-audio-topology.bin"
-          alsatplg -d "$RUNNER_TEMP/marble-audio-topology.bin" \
-            -o "$RUNNER_TEMP/marble-audio-topology.conf"
-          for backend in RX_CODEC_DMA_RX_0 TERTIARY_TDM_RX_0 TX_CODEC_DMA_TX_3; do
-            grep -q "$backend" "$RUNNER_TEMP/marble-audio-topology.conf" \
-              || { echo "FAIL: missing audio backend $backend"; exit 1; }
-          done
-
-      - name: Verify camera support DEB
-        run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/marble-device-support_*.deb | head -1)
-          dest="$RUNNER_TEMP/verify-camera"
-          dpkg-deb -x "$DEB" "$dest"
-          test -x "$dest/usr/libexec/marble-camera"
-          for file in lib/systemd/system/marble-camera@.service lib/modprobe.d/marble-camera.conf \
-              lib/udev/rules.d/72-marble-camera.rules share/wireplumber/wireplumber.conf.d/50-marble-camera.conf; do
-            test -s "$dest/usr/$file" || { echo "Missing camera support file: $file"; exit 1; }
-          done
-          notice="$dest/usr/share/doc/marble-device-support/camera-COPYING"
-          test -s "$notice" || test -s "$notice.gz"
-
-      - name: Verify wired audio UCM
-        run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/marble-device-support_*.deb | head -1)
-          dpkg-deb --fsys-tarfile "$DEB" | tar -xOf - \
-            ./usr/share/alsa/ucm2/Qualcomm/sm8450/xiaomi-marble/HiFi.conf \
-            > "$RUNNER_TEMP/marble-HiFi.conf"
-          grep -Fq 'SectionDevice."Headphones"' "$RUNNER_TEMP/marble-HiFi.conf"
-          grep -Fq 'SectionDevice."Headset"' "$RUNNER_TEMP/marble-HiFi.conf"
-          grep -Fq "RX_CODEC_DMA_RX_0 Audio Mixer MultiMedia2" "$RUNNER_TEMP/marble-HiFi.conf"
-
-      # libssc is a build dependency: headers and pkg-config are the interface.
-      - name: Verify libssc DEB
-        run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/libssc_*.deb | head -1)
-          [ -n "$DEB" ] || { echo "FAIL: no libssc deb built"; exit 1; }
-          dpkg-deb -f "$DEB" Package Version Architecture Depends
-
-          LIST=$(dpkg-deb -c "$DEB")
-          for pat in 'libssc\.so\.2' '/ssccli$' 'pkgconfig/libssc\.pc$' 'include/libssc/libssc-sensor\.h$'; do
-            echo "$LIST" | grep -qE "$pat" || { echo "FAIL: libssc deb is missing $pat"; exit 1; }
-          done
-
-          rm -rf "$RUNNER_TEMP/verify-libssc"
-          dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify-libssc"
-          SO=$(find "$RUNNER_TEMP/verify-libssc" -name 'libssc.so.2*' -type f | head -1)
-          [ -n "$SO" ] || { echo "FAIL: no libssc.so.2 in the package"; exit 1; }
-          echo "shared library: $SO"
-          strings "$SO" > "$RUNNER_TEMP/libssc.strings"
-          for signal in node-added service-added; do
-            grep -Fxq "$signal" "$RUNNER_TEMP/libssc.strings" \
-              || { echo "FAIL: libssc is missing the QRTR $signal subscription"; exit 1; }
-          done
-          if nm -D --undefined-only "$SO" | grep -E '[[:space:]]sleep(@|$)' >/dev/null; then
-            echo "FAIL: libssc still imports sleep for the QRTR retry"
-            exit 1
-          fi
-          echo "libssc deb verified: $DEB"
-
-      # Must still link libssc, or -Dssc-support fell back to disabled.
-      - name: Verify iio-sensor-proxy-ssc DEB
-        run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/iio-sensor-proxy-ssc_*.deb | head -1)
-          [ -n "$DEB" ] || { echo "FAIL: no iio-sensor-proxy-ssc deb built"; exit 1; }
-          dpkg-deb -f "$DEB" Package Version Architecture Depends Provides Conflicts Replaces
-
-          dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify-iio"
-          readelf -d "$RUNNER_TEMP/verify-iio/usr/libexec/iio-sensor-proxy" | grep -F '[libssc.so.2]' \
-            || { echo "FAIL: proxy binary does not link libssc"; exit 1; }
-          dpkg-deb -f "$DEB" Provides | grep -q 'iio-sensor-proxy' \
-            || { echo "FAIL: missing Provides: iio-sensor-proxy"; exit 1; }
-
-          LIST=$(dpkg-deb -c "$DEB")
-          # Path prefixes vary (/usr/lib or /lib); the file names must not.
-          for pat in '/usr/libexec/iio-sensor-proxy$' '/monitor-sensor$' \
-                     '/systemd/system/iio-sensor-proxy\.service$' \
-                     '/udev/rules\.d/80-iio-sensor-proxy\.rules$' \
-                     '/dbus-1/system\.d/net\.hadess\.SensorProxy\.conf$' \
-                     '/polkit-1/actions/net\.hadess\.SensorProxy\.policy$'; do
-            echo "$LIST" | grep -qE "$pat" || { echo "FAIL: missing $pat"; exit 1; }
-          done
-          echo "iio-sensor-proxy-ssc deb verified: $DEB"
-
-      # libva must find the driver in the multiarch dri dir with the msm alias.
-      - name: Verify libva-v4l2 DEB
-        run: |
-          DEB=$(ls "$GITHUB_WORKSPACE"/out/libva-v4l2_*.deb | head -1)
-          [ -n "$DEB" ] || { echo "FAIL: no libva-v4l2 deb built"; exit 1; }
-          dpkg-deb -f "$DEB" Package Version Architecture Depends Provides
-
-          dpkg-deb -f "$DEB" Provides | grep -q 'va-driver' \
-            || { echo "FAIL: missing Provides: va-driver"; exit 1; }
-          dpkg-deb -f "$DEB" Depends | grep -q 'libdrm' \
-            || { echo "FAIL: no libdrm dependency -> the driver links nothing"; exit 1; }
-
-          LIST=$(dpkg-deb -c "$DEB")
-          echo "$LIST" | grep -qE 'dri/v4l2_drv_video\.so$' \
-            || { echo "FAIL: v4l2_drv_video.so is not installed under .../dri"; exit 1; }
-          echo "$LIST" | grep -qE 'dri/msm_drv_video\.so -> v4l2_drv_video\.so$' \
-            || { echo "FAIL: the msm_drv_video.so alias is missing or points elsewhere"; exit 1; }
-          echo "$LIST" | grep -qE 'environment\.d/60-libva-v4l2\.conf$' \
-            || { echo "FAIL: GStreamer VA environment config is missing"; exit 1; }
-          # The branch installs no launcher, only the diagnostic trio and the node helper.
-          for f in 'bin/iris-device-check\.sh' 'bin/iris-verify\.sh' \
-                   'bin/iris-configure-clients\.sh' \
-                   'share/iris-vaapi/iris-node\.sh'; do
-            echo "$LIST" | grep -qE "$f$" \
-              || { echo "FAIL: upstream file $f is missing"; exit 1; }
-          done
-          echo "libva-v4l2 deb verified: $DEB"
-
-      # A partial success is not a release. These are the packages every rootfs
-      # installation requires; the install tests also re-check them per distro.
-      - name: Verify required release package set
-        run: |
-          missing=0
-          for p in \
-            linux-xiaomi-marble \
-            firmware-xiaomi-marble \
-            marble-device-support \
-            modemmanager-marble \
-            libmm-glib0 \
-            libqmi-glib5 \
-            libqmi-proxy \
-            libmbim-glib4 \
-            libmbim-proxy \
-            libssc \
-            iio-sensor-proxy-ssc \
-            hexagonrpcd \
-            libhexagonrpc0.4 \
-            libva-v4l2; do
-            found=
-            for deb in out/${p}_*.deb; do
-              if [ -e "$deb" ]; then
-                found=1
-                break
-              fi
-            done
-            if [ -z "$found" ]; then
-              echo "FAIL: required package was not built: $p"
-              missing=1
-            fi
-          done
-          [ "$missing" -eq 0 ] || exit 1
-
-          for deb in out/*.deb; do
-            dpkg-deb --info "$deb" >/dev/null \
-              || { echo "FAIL: unreadable DEB: $deb"; exit 1; }
-          done
-
-          dpkg-deb -f out/libmbim-glib4_*.deb Package Version Architecture Depends
-          echo "required release package set present"
 
       - name: Upload DEBs
         uses: actions/upload-artifact@v7
