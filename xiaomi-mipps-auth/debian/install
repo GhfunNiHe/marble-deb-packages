@@ -1,5 +1,3 @@
 xiaomi-mipps-fuel-gauge usr/libexec
-xiaomi-mipps-board-property usr/libexec
-prepare-android-runtime usr/libexec
 xiaomi-mipps-fuel-gauge.service usr/lib/systemd/system
 90-xiaomi-mipps-fuel-gauge.rules usr/lib/udev/rules.d

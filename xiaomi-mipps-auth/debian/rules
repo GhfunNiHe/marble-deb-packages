@@ -1,8 +1,18 @@
 #!/usr/bin/make -f
 
+pkgdir := $(CURDIR)/debian/xiaomi-mipps-auth
+runtime := $(pkgdir)/usr/lib/xiaomi-mipps-auth/android
+
 %:
 	dh $@
 
 override_dh_auto_configure:
 override_dh_auto_build:
 override_dh_auto_test:
+
+# Leave the Android ELF files intact and outside the Debian library scanner.
+execute_after_dh_shlibdeps:
+	install -d "$(runtime)"
+	tar --extract --xz --touch --no-same-owner --file=android-runtime.tar.xz --directory="$(runtime)"
+	cd "$(runtime)" && sha256sum --strict --quiet -c "$(CURDIR)/debian/runtime.sha256"
+	mv -T "$(runtime)/notices" "$(pkgdir)/usr/share/doc/xiaomi-mipps-auth/android-notices"

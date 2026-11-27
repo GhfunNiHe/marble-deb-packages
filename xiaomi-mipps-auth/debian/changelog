@@ -1,3 +1,11 @@
+xiaomi-mipps-auth (0.21+marble5) unstable; urgency=medium
+
+  * Include the marble fuel-gauge verifier, Android linker and required
+    shared libraries. Use the packaged runtime on first boot and upgrades.
+  * Move ROM preparation to the package build host.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 09:30:00 +0800
+
 xiaomi-mipps-auth (0.21+marble4) unstable; urgency=medium
 
   * Retry the stock fuel-gauge verifier once if ADSP has not confirmed
