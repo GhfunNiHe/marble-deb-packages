@@ -8,6 +8,8 @@ PKG = linux-xiaomi-marble
 KERNEL_CONFIG = config-xiaomi-marble.aarch64
 EXTRA_CONFIG = extra-kernel.config
 DTB_NAME = sm8475-xiaomi-marble
+LOOPBACK_BUILD = $(CURDIR)/debian/build-v4l2loopback
+MODULE_STAGE = $(CURDIR)/debian/$(PKG)/usr
 
 export DH_VERBOSE = 1
 
@@ -20,24 +22,16 @@ override_dh_auto_configure:
 
 # distclean would delete the top-level debian/ this packaging lives in.
 override_dh_auto_clean:
+	$(RM) -r "$(LOOPBACK_BUILD)"
 
 # The 'test' target is `make syncconfig`: it hangs on /dev/pts and rewrites .config.
 override_dh_auto_test:
 
 override_dh_auto_build:
-	# LOCALVERSION hash: explicit pin, then the tree's own HEAD, then github with retries.
-	COMMIT_HASH="$${KERNEL_COMMIT_HASH:-}"; \
-		if [ -z "$$COMMIT_HASH" ] && [ -d .git ]; then \
+	# CI identifies the fetched kernel commit; local Git builds use their own HEAD.
+	set -e; COMMIT_HASH="$${KERNEL_COMMIT_HASH:-}"; \
+		if [ -z "$$COMMIT_HASH" ] && [ -e .git ]; then \
 			COMMIT_HASH=$$(git rev-parse --short=7 HEAD 2>/dev/null); \
-		fi; \
-		if [ -z "$$COMMIT_HASH" ]; then \
-			for attempt in 1 2 3 4; do \
-				COMMIT_HASH=$$(timeout 20 git ls-remote \
-					https://github.com/iLtanaka/linux-marble.git \
-					refs/heads/main 2>/dev/null | cut -c1-7); \
-				[ -n "$$COMMIT_HASH" ] && break; \
-				sleep 2; \
-			done; \
 		fi; \
 		[ -n "$$COMMIT_HASH" ] || COMMIT_HASH=unknown; \
 		LOCALVERSION_FULL="-$(SOC)-g$$COMMIT_HASH"; \
@@ -56,17 +50,26 @@ override_dh_auto_build:
 	make ARCH=$(KERNEL_ARCH) CC="ccache clang" LLVM=1 \
 		LOCALVERSION="$$LOCALVERSION_FULL" -j$$(nproc) \
 		Image modules qcom/$(DTB_NAME).dtb
+	mkdir -p "$(LOOPBACK_BUILD)"
+	tar -xf /usr/src/v4l2loopback.tar.bz2 -C "$(LOOPBACK_BUILD)" --strip-components=2 \
+		modules/v4l2loopback/Kbuild modules/v4l2loopback/v4l2loopback.c \
+		modules/v4l2loopback/v4l2loopback.h modules/v4l2loopback/v4l2loopback_formats.h
+	patch --batch --fuzz=0 -p1 -d "$(LOOPBACK_BUILD)" < debian/v4l2loopback/start-capture-at-next-frame.patch
+	$(MAKE) ARCH=$(KERNEL_ARCH) CC="ccache clang" LLVM=1 \
+		LOCALVERSION="$$(cat .lkv_suffix)" M="$(LOOPBACK_BUILD)" modules
 
 override_dh_auto_install:
 	# /boot carries only what the boot chain reads: Image (as vmlinuz-<ver>) and the DTB.
-	KREL=$$(cat include/config/kernel.release); \
+	set -e; KREL=$$(cat include/config/kernel.release); \
 	install -d \
 		debian/$(PKG)/boot \
 		debian/$(PKG)/usr/lib/modules/$$KREL/dtb/qcom \
 		debian/$(PKG)/usr/share/$(PKG); \
 	\
 	make ARCH=$(KERNEL_ARCH) CC="ccache clang" LLVM=1 \
-		INSTALL_MOD_PATH=debian/$(PKG) modules_install; \
+		LOCALVERSION="$$(cat .lkv_suffix)" INSTALL_MOD_PATH="$(MODULE_STAGE)" modules_install; \
+	make ARCH=$(KERNEL_ARCH) CC="ccache clang" LLVM=1 M="$(LOOPBACK_BUILD)" \
+		LOCALVERSION="$$(cat .lkv_suffix)" INSTALL_MOD_PATH="$(MODULE_STAGE)" modules_install; \
 	rm -rf debian/$(PKG)/usr/lib/modules/$$KREL/build; \
 	rm -rf debian/$(PKG)/usr/lib/modules/$$KREL/source; \
 	\
@@ -81,6 +84,8 @@ override_dh_auto_install:
 		debian/$(PKG)/usr/share/$(PKG)/kernel.release; \
 	install -Dm644 .config \
 		debian/$(PKG)/usr/share/$(PKG)/config-$$KREL
+	install -Dm644 /usr/share/doc/v4l2loopback-source/copyright \
+		debian/$(PKG)/usr/share/doc/$(PKG)/v4l2loopback.copyright
 
 # Kernel binaries must never be stripped; modules keep their debug info
 # (no INSTALL_MOD_STRIP), so skip dh_strip entirely.

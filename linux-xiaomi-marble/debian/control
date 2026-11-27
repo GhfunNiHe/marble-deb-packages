@@ -18,9 +18,10 @@ Build-Depends:
  python3,
  ccache,
  git,
+ v4l2loopback-source (= 0.15.4-2),
 Standards-Version: 4.6.2
-Homepage: https://github.com/iLtanaka/linux-marble
-Vcs-Git: https://github.com/GhfunNiHe/marble-deb-package.git
+Homepage: https://github.com/GhfunNiHe/linux-marble
+Vcs-Git: https://github.com/GhfunNiHe/marble-deb-packages.git
 
 Package: linux-xiaomi-marble
 Architecture: arm64
@@ -28,11 +29,13 @@ Depends: ${misc:Depends}, kmod, linux-base
 Recommends: firmware-xiaomi-marble
 Description: Linux kernel for Xiaomi Redmi Note 12 Turbo (marble)
  Mainline Linux 7.2.8 kernel with the marble (Poco F5 / Redmi Note 12 Turbo,
- SM7475) device enablement patches from the iLtanaka linux-marble tree.
+ SM7475), based on iLtanaka's device enablement and the camera port by
+ LazyBonesLZY, including Shandorman's S5K3P9 driver.
  .
  Built with LLVM/ThinLTO and ccache. Ships the uncompressed kernel Image
- (as vmlinuz-<ver>), the device tree, and the out-of-tree modules. No
- initramfs is generated (no-initramfs direct boot, the path verified by the
+ (as vmlinuz-<ver>), the device tree, and kernel modules including
+ v4l2loopback for V4L2 camera applications. No initramfs is generated
+ (no-initramfs direct boot, the path verified by the
  original port); the postinst requires /boot/efi to be a vfat ESP
  (PARTLABEL=esp or filesystem LABEL=ESP), then syncs vmlinuz + DTB. It creates
  /extlinux/extlinux.conf only on first installation and preserves it on

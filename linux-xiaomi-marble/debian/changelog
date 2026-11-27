@@ -1,3 +1,12 @@
+linux-xiaomi-marble (7.2.8+marble1) unstable; urgency=medium
+
+  * Enable the camera clock controller and LazyBonesLZY's GC02M1 macro
+    and S5K3P9 front camera port. Shandorman wrote the S5K3P9 driver.
+  * Build v4l2loopback from Debian's 0.15.4-2 sources against the packaged
+    kernel. Start on-demand capture with a fresh frame after an idle period.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 10:32:00 +0800
+
 linux-xiaomi-marble (7.2.8+marble0) unstable; urgency=medium
 
   * Rename the source and binary package from linux-redmi-marble to

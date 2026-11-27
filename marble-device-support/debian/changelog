@@ -1,3 +1,13 @@
+marble-device-support (1.0.0-27) unstable; urgency=medium
+
+  * Provide portrait V4L2 outputs for the ultrawide, front and macro cameras.
+    Start libcamera capture on demand and expose the outputs to PipeWire.
+    The bridge and desktop policy follow bluseliu50's Piano camera work.
+  * Install the GStreamer capture and conversion plugins and libcamera's
+    image processing modules, including on images without Recommends.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 10:32:00 +0800
+
 marble-device-support (1.0.0-26) unstable; urgency=medium
 
   * Select suspend-to-idle for systemd suspend on marble.

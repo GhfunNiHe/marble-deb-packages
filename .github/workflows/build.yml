@@ -1,6 +1,6 @@
 name: Build Marble Deb Packages
 
-# Each package dir is overlaid onto a fresh upstream checkout; the kernel builds in build-kernel.yml.
+# Each package dir is overlaid onto the selected upstream source.
 
 # Source parameters: overridable per run via workflow_dispatch. Empty refs
 # fall back to the changelog version or <pkg>/COMMIT; keep them in sync.
@@ -12,7 +12,7 @@ env:
   SRC_LIBMBIM_REPO: ${{ inputs.libmbim_src_repo || 'https://gitlab.freedesktop.org/mobile-broadband/libmbim' }}
   SRC_LIBMBIM_REF: ${{ inputs.libmbim_src_ref || '1.32.0' }} # Ubuntu 24.04 backport floor
   SRC_DEVSUPPORT_REPO: ${{ inputs.devsupport_src_repo || 'https://github.com/GhfunNiHe/marble-device-support' }}
-  SRC_DEVSUPPORT_REF: ${{ inputs.devsupport_src_ref }}      # empty = upstream default branch
+  SRC_DEVSUPPORT_REF: ${{ inputs.devsupport_src_ref || 'main' }}
   SRC_MODEMMANAGER_REPO: ${{ inputs.modemmanager_src_repo || 'https://gitlab.freedesktop.org/mobile-broadband/ModemManager' }}
   SRC_MODEMMANAGER_REF: ${{ inputs.modemmanager_src_ref }}  # empty = modemmanager/COMMIT
   SRC_LIBSSC_REPO: ${{ inputs.libssc_src_repo || 'https://codeberg.org/DylanVanAssche/libssc' }}
@@ -24,7 +24,7 @@ env:
   SRC_LIBVA_REPO: ${{ inputs.libva_src_repo || 'https://github.com/FFT-infra/qualcomm-iris-vaapi' }}
   SRC_LIBVA_REF: ${{ inputs.libva_src_ref || 'feat/encode-entrypoints' }}  # empty = feat/encode-entrypoints
   SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/GhfunNiHe/linux-marble' }}
-  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}              # empty = marble-7.2
+  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref || 'marble-7.2' }}
 
 on:
   push:
@@ -74,9 +74,9 @@ on:
         type: string
         default: 'https://github.com/GhfunNiHe/marble-device-support'
       devsupport_src_ref:
-        description: 'marble-device-support 的分支/tag（留空 = 上游默认分支）'
+        description: 'marble-device-support 的分支/tag'
         type: string
-        default: ''
+        default: 'main'
       modemmanager_src_repo:
         description: 'ModemManager 源码仓库地址 (repo URL)'
         type: string
@@ -153,7 +153,7 @@ jobs:
             rsync cpio kmod python3 zstd xz-utils lz4 alsa-utils \
             clang lld llvm \
             ninja-build pkg-config file patch \
-            libglib2.0-dev libprotobuf-c-dev \
+            libglib2.0-dev libprotobuf-c-dev libgstreamer-plugins-base1.0-dev \
             protobuf-compiler protobuf-c-compiler \
             libgudev-1.0-dev libpolkit-gobject-1-dev \
             libmbim-glib-dev libqrtr-glib-dev libsystemd-dev libgirepository1.0-dev \
@@ -251,7 +251,6 @@ jobs:
             echo "SRC_IIO_URL=$(src_url "$SRC_IIO_REPO" "${SRC_IIO_REF:-$IIOVER}")"
             echo "SRC_HEXAGONRPC_URL=$(src_url "$SRC_HEXAGONRPC_REPO" "${SRC_HEXAGONRPC_REF:-v0.4.0}")"
             echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-feat/encode-entrypoints}")"
-            echo "SRC_KERNEL_URL=$(src_url "$SRC_KERNEL_REPO" "${SRC_KERNEL_REF:-marble-7.2}")"
           } >> "$GITHUB_ENV"
 
           # A wrong parameter shows up as a 404 in the next step, so print what
@@ -302,14 +301,8 @@ jobs:
       # marble-device-support: after libqmi, marble-imsctl needs libqmi 1.39.1.
       - name: "Build: marble-device-support"
         run: |
-          # Empty ref follows upstream's default branch.
-          if [ -n "$SRC_DEVSUPPORT_REF" ]; then
-            git clone --depth 1 --branch "$SRC_DEVSUPPORT_REF" \
-              "$SRC_DEVSUPPORT_REPO" "$RUNNER_TEMP/build/marble-device-support"
-          else
-            git clone --depth 1 "$SRC_DEVSUPPORT_REPO" \
-              "$RUNNER_TEMP/build/marble-device-support"
-          fi
+          GIT_TERMINAL_PROMPT=0 timeout 5m git clone --depth 1 --branch "$SRC_DEVSUPPORT_REF" \
+            "$SRC_DEVSUPPORT_REPO" "$RUNNER_TEMP/build/marble-device-support"
           cp -a marble-device-support/debian "$RUNNER_TEMP/build/marble-device-support/debian"
           cd "$RUNNER_TEMP/build/marble-device-support"
           dpkg-buildpackage -b -us -uc
@@ -383,21 +376,12 @@ jobs:
           dpkg-buildpackage -b -us -uc
           cp "$RUNNER_TEMP/build"/libva-v4l2_*.deb "$GITHUB_WORKSPACE/out/"
 
-      # Kernel: overlay debian/ + configs onto the upstream main snapshot
+      - name: Prepare kernel build
+        run: sh linux-xiaomi-marble/ci/prepare-build
+
       - name: "Build: linux-xiaomi-marble"
         run: |
-          wget -c -q -O "$RUNNER_TEMP/build/linux-marble.tar.gz" "$SRC_KERNEL_URL"
-          # Top-level dir is <repo>-<ref>: find it instead of assuming a name.
-          mkdir -p "$RUNNER_TEMP/build/kernel-src"
-          tar -xf "$RUNNER_TEMP/build/linux-marble.tar.gz" -C "$RUNNER_TEMP/build/kernel-src"
-          SRC=$(find "$RUNNER_TEMP/build/kernel-src" -mindepth 1 -maxdepth 1 -type d | head -1)
-          [ -n "$SRC" ] || { echo "FAIL: kernel tarball has no top-level directory"; exit 1; }
-          cp -a linux-xiaomi-marble/debian "$SRC/debian"
-          cp linux-xiaomi-marble/config-xiaomi-marble.aarch64 "$SRC/"
-          cp linux-xiaomi-marble/extra-kernel.config "$SRC/"
-
-          cd "$SRC"
-          # The tree carries our patches; debian/rules only syncs and merges the config.
+          cd "$KSRC"
           dpkg-buildpackage -b -us -uc
           echo "=== ccache stats ==="
           ccache --show-stats
@@ -405,7 +389,7 @@ jobs:
           KREL=$(cat include/config/kernel.release)
           echo "KREL=$KREL" >> "$GITHUB_ENV"
           # The .deb lands in the wrapper dir, not in $RUNNER_TEMP/build.
-          cp "$SRC"/../*.deb "$GITHUB_WORKSPACE/out/"
+          cp "$KSRC"/../*.deb "$GITHUB_WORKSPACE/out/"
           {
             echo "### Kernel build result"
             echo ""
@@ -430,6 +414,7 @@ jobs:
           fi
 
           dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify"
+          sh linux-xiaomi-marble/ci/verify-camera-modules "$RUNNER_TEMP/verify" "$KREL"
           if ! file "$RUNNER_TEMP/verify/boot/vmlinuz-$KREL" | grep -q 'ARM64 boot executable Image'; then
             echo "FAIL: vmlinuz is not an uncompressed arm64 Image"; exit 1
           fi
@@ -487,6 +472,19 @@ jobs:
             grep -q "$backend" "$RUNNER_TEMP/marble-audio-topology.conf" \
               || { echo "FAIL: missing audio backend $backend"; exit 1; }
           done
+
+      - name: Verify camera support DEB
+        run: |
+          DEB=$(ls "$GITHUB_WORKSPACE"/out/marble-device-support_*.deb | head -1)
+          dest="$RUNNER_TEMP/verify-camera"
+          dpkg-deb -x "$DEB" "$dest"
+          test -x "$dest/usr/libexec/marble-camera"
+          for file in lib/systemd/system/marble-camera@.service lib/modprobe.d/marble-camera.conf \
+              lib/udev/rules.d/72-marble-camera.rules share/wireplumber/wireplumber.conf.d/50-marble-camera.conf; do
+            test -s "$dest/usr/$file" || { echo "Missing camera support file: $file"; exit 1; }
+          done
+          notice="$dest/usr/share/doc/marble-device-support/camera-COPYING"
+          test -s "$notice" || test -s "$notice.gz"
 
       - name: Verify wired audio UCM
         run: |

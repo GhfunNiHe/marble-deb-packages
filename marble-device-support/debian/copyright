@@ -9,6 +9,16 @@ License: MIT or GPL-2.0-or-later
  MIT, configuration and scripts are GPL-2.0-or-later or MIT. See the
  upstream repository for per-file headers.
 
+Files: camera/marble-camera.c
+       modprobe/marble-camera.conf
+       wireplumber/50-marble-camera.conf
+Copyright: 2026 bluseliu50 and piano mainline contributors
+License: MIT
+Comment: The bridge follows bluseliu50's piano-camerad client notifications.
+ The module options and WirePlumber policy are adapted from the Piano setup
+ in yzddmr6/xiaomipad-8pro-mainline. See camera/COPYING for the upstream
+ revisions and permission notice, installed as camera-COPYING with this package.
+
 License: MIT
  Permission is hereby granted, free of charge, to any person obtaining a
  copy of this software and associated documentation files (the "Software"),

@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+modules="$1/usr/lib/modules/$2"
+for file in \
+	kernel/drivers/clk/qcom/camcc-sm8450.ko.zst \
+	kernel/drivers/media/platform/qcom/camss/qcom-camss.ko.zst \
+	kernel/drivers/media/i2c/gc02m1.ko.zst \
+	kernel/drivers/media/i2c/imx355.ko.zst \
+	kernel/drivers/media/i2c/s5k3p9.ko.zst \
+	updates/v4l2loopback.ko.zst
+do
+	case $(modinfo -F vermagic "$modules/$file") in
+		"$2 "*) ;;
+		*) echo "Missing camera module or incorrect kernel release: $file" >&2; exit 1 ;;
+	esac
+done
+test -s "$1/usr/share/doc/linux-xiaomi-marble/v4l2loopback.copyright"

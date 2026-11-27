@@ -1,0 +1,94 @@
+Description: Start on-demand V4L2 capture at the next published frame
+ The marble camera bridge advertises its output with an idle frame and
+ subscribes to CLIENT_USAGE to resume hardware capture. A new reader can
+ otherwise dequeue a timestamp from the previous session. Take its starting
+ position before notifying the producer, only on a capture token transition.
+ Writers without a usage subscription, and devices configured to repeat
+ frames or display a timeout image, retain their buffered first frame.
+Origin: other, local marble kernel packaging for v4l2loopback 0.15.4-2
+Forwarded: no
+
+--- a/v4l2loopback.c
++++ b/v4l2loopback.c
+@@ -2054,6 +2054,29 @@
+ 
+ /* ------------- STREAMING ------------------- */
+ 
++static bool output_subscribed_to_usage(struct video_device *vdev)
++{
++	struct v4l2_subscribed_event *sev;
++	struct v4l2_fh *fh;
++	unsigned long flags;
++	bool subscribed = false;
++
++	spin_lock_irqsave(&vdev->fh_lock, flags);
++	list_for_each_entry(fh, &vdev->fh_list, list) {
++		if (!has_output_token(fh_to_opener(fh)->stream_token))
++			continue;
++		list_for_each_entry(sev, &fh->subscribed, list) {
++			if (sev->type == V4L2_EVENT_PRI_CLIENT_USAGE && !sev->id) {
++				subscribed = true;
++				break;
++			}
++		}
++		break;
++	}
++	spin_unlock_irqrestore(&vdev->fh_lock, flags);
++	return subscribed;
++}
++
+ /* start streaming
+  * called on VIDIOC_STREAMON
+  */
+@@ -2072,16 +2095,28 @@
+ 
+ 	switch (type) {
+ 	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
+-		if (has_output_token(dev->stream_tokens) && !dev->keep_format)
++		spin_lock_bh(&dev->lock);
++		if (has_output_token(dev->stream_tokens) && !dev->keep_format) {
++			spin_unlock_bh(&dev->lock);
+ 			return -EIO;
++		}
+ 		if (dev->stream_tokens & token) {
++			/* The producer starts its camera on the usage event. */
++			if (!dev->sustain_framerate && !dev->timeout_jiffies &&
++			    output_subscribed_to_usage(dev->vdev)) {
++				opener->read_position = dev->write_position;
++				opener->reread_count = dev->reread_count;
++			}
+ 			acquire_token(dev, opener, stream, token);
+ 			client_usage_queue_event(dev->vdev);
+ 		}
++		spin_unlock_bh(&dev->lock);
+ 		return 0;
+ 	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
++		spin_lock_bh(&dev->lock);
+ 		if (dev->stream_tokens & token)
+ 			acquire_token(dev, opener, stream, token);
++		spin_unlock_bh(&dev->lock);
+ 		return 0;
+ 	default:
+ 		return -EINVAL;
+@@ -2112,17 +2147,21 @@
+ 
+ 	switch (type) {
+ 	case V4L2_BUF_TYPE_VIDEO_OUTPUT:
++		spin_lock_bh(&dev->lock);
+ 		if (opener->stream_token & token)
+ 			release_token(dev, opener, stream);
++		spin_unlock_bh(&dev->lock);
+ 		/* reset output queue */
+ 		if (dev->used_buffer_count > 0)
+ 			prepare_buffer_queue(dev, dev->used_buffer_count);
+ 		return 0;
+ 	case V4L2_BUF_TYPE_VIDEO_CAPTURE:
++		spin_lock_bh(&dev->lock);
+ 		if (opener->stream_token & token) {
+ 			release_token(dev, opener, stream);
+ 			client_usage_queue_event(dev->vdev);
+ 		}
++		spin_unlock_bh(&dev->lock);
+ 		return 0;
+ 	default:
+ 		return -EINVAL;

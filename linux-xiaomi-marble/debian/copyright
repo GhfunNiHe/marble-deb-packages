@@ -1,7 +1,11 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: linux-marble
 Upstream-Contact: Tatsuki Tanaka <tatsuki@tanakatatsuki.dev>
-Source: https://github.com/iLtanaka/linux-marble
+Source: https://github.com/GhfunNiHe/linux-marble/tree/marble-7.2
+Comment: Based on Tatsuki Tanaka's iLtanaka/linux-marble port. The GC02M1
+ driver and marble front and macro camera integration come from LazyBonesLZY
+ (https://github.com/LazyBonesLZY/linux-marble/tree/marble-7.2). Shandorman
+ wrote the S5K3P9 driver that LazyBonesLZY adapted for marble.
 
 Files: *
 Copyright: 2005-2026 The Linux kernel developers
@@ -25,3 +29,21 @@ License: GPL-2.0-only
 Files: debian/*
 Copyright: 2026 GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
 License: GPL-2.0-only
+
+Files: debian/v4l2loopback/start-capture-at-next-frame.patch
+Copyright: 2026 GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>
+License: GPL-2+
+Comment: The fresh-frame change for on-demand readers is a local marble
+ packaging patch to the Debian v4l2loopback source.
+
+Files: debian/build-v4l2loopback/*
+Copyright: 2005-2009 Vasily Levin
+           2010-2025 IOhannes m zmölnig and the v4l2loopback contributors
+           2011 Stefan Diewald
+           2012 Anton Novikov
+License: GPL-2+
+ The v4l2loopback module is free software under the GNU General Public
+ License, either version 2 or (at your option) any later version.
+ The complete text of version 2 is in /usr/share/common-licenses/GPL-2.
+Comment: Built from Debian's v4l2loopback-source package. Its complete
+ copyright notice is installed in /usr/share/doc/linux-xiaomi-marble/v4l2loopback.copyright.

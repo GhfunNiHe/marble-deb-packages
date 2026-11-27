@@ -10,7 +10,7 @@ on:
         description: 'Publish as a prerelease (untick to publish a full release)'
         type: boolean
         default: true
-      # 源码参数：默认值就是本仓库当前构建用的上游地址和 main 分支。
+      # 默认使用 marble 项目的内核仓库及其设备分支。
       kernel_src_repo:
         description: 'linux-marble 内核源码仓库地址 (repo URL)'
         type: string
@@ -23,7 +23,7 @@ on:
 # Source parameters: repo URL and optional ref, empty ref keeps the default.
 env:
   SRC_KERNEL_REPO: ${{ inputs.kernel_src_repo || 'https://github.com/GhfunNiHe/linux-marble' }}
-  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref }}   # empty = marble-7.2
+  SRC_KERNEL_REF: ${{ inputs.kernel_src_ref || 'marble-7.2' }}
 
 # Kernel rebuilds supersede each other; never queue them up.
 concurrency:
@@ -77,29 +77,8 @@ jobs:
             ccache-marble-${{ runner.os }}-${{ runner.arch }}-
             ccache-marble-
 
-      - name: Download upstream source
-        run: |
-          # GitLab wants the project name in the path, GitHub and Codeberg do not.
-          REF="${SRC_KERNEL_REF:-marble-7.2}"
-          case "$SRC_KERNEL_REPO" in
-            *gitlab*) URL="$SRC_KERNEL_REPO/-/archive/$REF/$(basename "$SRC_KERNEL_REPO")-$REF.tar.gz" ;;
-            *)        URL="$SRC_KERNEL_REPO/archive/$REF.tar.gz" ;;
-          esac
-          echo "kernel source: $URL"
-
-          wget -c -q -O "$RUNNER_TEMP/build/linux-marble.tar.gz" "$URL"
-          # Top-level dir is <repo>-<ref>: find it, then pass it on through $GITHUB_ENV.
-          mkdir -p "$RUNNER_TEMP/build/kernel-src"
-          tar -xf "$RUNNER_TEMP/build/linux-marble.tar.gz" -C "$RUNNER_TEMP/build/kernel-src"
-          KSRC=$(find "$RUNNER_TEMP/build/kernel-src" -mindepth 1 -maxdepth 1 -type d | head -1)
-          [ -n "$KSRC" ] || { echo "FAIL: kernel tarball has no top-level directory"; exit 1; }
-          echo "KSRC=$KSRC" >> "$GITHUB_ENV"
-
-      - name: Overlay debian/ and configs
-        run: |
-          cp -a linux-xiaomi-marble/debian "$KSRC/debian"
-          cp linux-xiaomi-marble/config-xiaomi-marble.aarch64 "$KSRC/"
-          cp linux-xiaomi-marble/extra-kernel.config "$KSRC/"
+      - name: Prepare kernel build
+        run: sh linux-xiaomi-marble/ci/prepare-build
 
       - name: Build kernel
         run: |
@@ -137,6 +116,7 @@ jobs:
           fi
 
           dpkg-deb -x "$DEB" "$RUNNER_TEMP/verify"
+          sh linux-xiaomi-marble/ci/verify-camera-modules "$RUNNER_TEMP/verify" "$KREL"
           if ! file "$RUNNER_TEMP/verify/boot/vmlinuz-$KREL" | grep -q 'ARM64 boot executable Image'; then
             echo "FAIL: vmlinuz is not an uncompressed arm64 Image"; exit 1
           fi
