@@ -1,0 +1,2 @@
+usr/lib/*/NetworkManager/*/libnm-device-plugin-ovs.so
+usr/lib/systemd/system/NetworkManager.service.d/NetworkManager-ovs.conf

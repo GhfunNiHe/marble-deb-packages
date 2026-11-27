@@ -1,0 +1,33 @@
+From: Michael Biebl <biebl@debian.org>
+Date: Wed, 2 Sep 2026 14:25:34 +0200
+Subject: Fix test suite failure with glib 2.89
+
+See https://gitlab.freedesktop.org/NetworkManager/NetworkManager/-/work_items/2015#note_3632884
+and https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1145695
+
+Thanks: Simon McVittie
+---
+ src/libnm-glib-aux/tests/test-shared-general.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/libnm-glib-aux/tests/test-shared-general.c b/src/libnm-glib-aux/tests/test-shared-general.c
+index 95255c7..f18111d 100644
+--- a/src/libnm-glib-aux/tests/test-shared-general.c
++++ b/src/libnm-glib-aux/tests/test-shared-general.c
+@@ -262,12 +262,12 @@ test_nm_strdup_int(void)
+ #define _NM_STRDUP_INT_TEST(num, str)  \
+     G_STMT_START                       \
+     {                                  \
+-        gs_free char *_s1 = NULL;      \
++        gs_free char *actual = NULL;      \
+                                        \
+-        _s1 = nm_strdup_int((num));    \
++        actual = nm_strdup_int((num));    \
+                                        \
+-        g_assert(_s1);                 \
+-        g_assert_cmpstr(_s1, ==, str); \
++        g_assert(actual);                 \
++        g_assert_cmpstr(actual, ==, str); \
+     }                                  \
+     G_STMT_END
+ 

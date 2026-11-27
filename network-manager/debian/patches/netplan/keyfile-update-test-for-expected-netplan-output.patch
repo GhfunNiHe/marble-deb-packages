@@ -1,0 +1,37 @@
+From: Jeremy Bicha <jeremy.bicha@canonical.com>
+Date: Wed, 19 Feb 2025 14:38:24 -0500
+Subject: keyfile: update test for expected netplan output
+
+0002-netplan-make-use-of-libnetplan-for-YAML-backend.patch
+says that netplan explicitly uses infrastructure mode
+so update the expected test output to match
+
+Forwarded: not-needed
+---
+ src/core/settings/plugins/keyfile/tests/keyfiles/Test_Write_Wireless | 1 +
+ src/core/settings/plugins/keyfile/tests/test-keyfile-settings.c      | 2 --
+ 2 files changed, 1 insertion(+), 2 deletions(-)
+
+--- a/src/core/settings/plugins/keyfile/tests/keyfiles/Test_Write_Wireless
++++ b/src/core/settings/plugins/keyfile/tests/keyfiles/Test_Write_Wireless
+@@ -7,6 +7,7 @@ timestamp=305415219
+ 
+ [wifi]
+ bssid=AA:B9:A1:74:55:44
++mode=infrastructure
+ mtu=1000
+ ssid=1337
+ 
+--- a/src/core/settings/plugins/keyfile/tests/test-keyfile-settings.c
++++ b/src/core/settings/plugins/keyfile/tests/test-keyfile-settings.c
+@@ -864,10 +864,8 @@ test_write_wireless_connection(void)
+                  bssid,
+                  NM_SETTING_WIRELESS_SSID,
+                  ssid,
+-                 #if WITH_NETPLAN
+                  //XXX: netplan uses explicit "infrastructure" mode
+                  NM_SETTING_WIRELESS_MODE, NM_SETTING_WIRELESS_MODE_INFRA,
+-                 #endif
+                  NM_SETTING_WIRED_MTU,
+                  1000,
+                  NULL);

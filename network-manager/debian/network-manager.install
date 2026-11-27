@@ -1,0 +1,34 @@
+usr/sbin/NetworkManager
+usr/bin/nm-online
+usr/bin/nmcli
+usr/libexec/
+usr/lib/NetworkManager/
+usr/lib/*/NetworkManager/*/libnm-settings-plugin-ifupdown.so
+usr/lib/*/NetworkManager/*/libnm-device-plugin-adsl.so
+usr/lib/*/NetworkManager/*/libnm-device-plugin-bluetooth.so
+usr/lib/*/NetworkManager/*/libnm-device-plugin-wifi.so
+usr/lib/*/NetworkManager/*/libnm-device-plugin-wwan.so
+usr/lib/*/NetworkManager/*/libnm-ppp-plugin.so
+usr/lib/*/NetworkManager/*/libnm-wwan.so
+usr/lib/pppd/*/*.so
+usr/lib/firewalld/zones/nm-shared.xml
+usr/lib/systemd/system/*.service
+usr/lib/udev/rules.d/*.rules
+usr/share/man/man1/nm-online.1
+usr/share/man/man1/nmcli.1
+usr/share/man/man5/
+usr/share/man/man7/
+usr/share/man/man8/
+usr/share/dbus-1/system-services/
+usr/share/dbus-1/system.d/org.freedesktop.NetworkManager.conf
+usr/share/dbus-1/system.d/nm-dispatcher.conf
+usr/share/dbus-1/system.d/nm-priv-helper.conf
+usr/share/polkit-1/
+usr/share/bash-completion/
+etc/NetworkManager/
+var/lib/NetworkManager/
+debian/NetworkManager.conf etc/NetworkManager/
+debian/org.freedesktop.NetworkManager.rules usr/share/polkit-1/rules.d/
+debian/10-*.conf usr/lib/NetworkManager/conf.d/
+debian/default-wifi-powersave-on.conf etc/NetworkManager/conf.d
+debian/source_network-manager.py /usr/share/apport/package-hooks/

@@ -1,0 +1,6 @@
+usr/lib/*/pkgconfig/libnm.pc
+usr/lib/*/libnm.so
+usr/include/libnm/
+usr/share/gtk-doc/html/libnm/
+usr/share/gir-1.0/NM-1.0.gir
+usr/share/vala/vapi/libnm.*

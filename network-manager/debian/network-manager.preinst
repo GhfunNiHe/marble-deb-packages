@@ -1,0 +1,19 @@
+#!/bin/sh
+
+set -e
+
+#DEBHELPER#
+
+DIR="/etc/NetworkManager/system-connections"
+BACKUP_DIR="/var/lib/NetworkManager/backups"
+CNT=$(ls -1 "$DIR" | wc -l)
+if ([ "$1" = "upgrade" ] || [ "$1" = "install" ]) && [ -d "$DIR" ] && [ "$CNT" -ge 1 ]; then
+    # create backup directory if it does not yet exist
+    mkdir -p "$BACKUP_DIR" || true
+    BAK="$BACKUP_DIR/system-connections_$2"
+    if [ -d "$BAK" ]; then
+	rm -r "$BAK"
+    fi
+    # copy current system-connections to the backup directory
+    cp -r "$DIR" "$BAK"
+fi

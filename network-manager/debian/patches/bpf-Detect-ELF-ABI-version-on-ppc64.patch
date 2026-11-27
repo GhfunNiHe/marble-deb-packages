@@ -1,0 +1,41 @@
+From: OPNA2608 <opna2608@protonmail.com>
+Date: Sat, 29 Aug 2026 02:17:07 +0200
+Subject: bpf: Detect ELF ABI version on ppc64
+
+On powerpc64-linux, there are multiple ABI versions in use. Hardcoding one is the wrong approach.
+
+Instead, ask the compiler which version is in use by checking the value of the `_CALL_ELF` define.
+It is guaranteed to be defined as 2 on ELFv2, and may either be undefined or defined as 1 on ELFv1.
+
+(cherry picked from commit 3c28325b9c63386e5313ce006267144e7f63417a)
+---
+ src/core/bpf/meson.build | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/src/core/bpf/meson.build b/src/core/bpf/meson.build
+index 39b978d..fb75987 100644
+--- a/src/core/bpf/meson.build
++++ b/src/core/bpf/meson.build
+@@ -130,9 +130,21 @@ libbpf_include_dir = dependency('libbpf').get_variable(pkgconfig : 'includedir')
+ #
+ # C.f. https://mesonbuild.com/Reference-tables.html#cpu-families
+ # and src/basic/missing_syscall_def.h.
++
++# Start with older ABI. When define is missing, we're likely targeting that.
++ppc64_elf_version = '1'
++
++if host_machine.cpu_family() == 'ppc64'
++  # cc doesn't have to be bpf_compiler, but they should be targeting the same ABI
++  call_elf_value = cc.get_define('_CALL_ELF')
++  if call_elf_value != ''
++    ppc64_elf_version = call_elf_value
++  endif
++endif
++
+ cpu_arch_defines = {
+   'ppc'         : ['-D__powerpc__', '-D__TARGET_ARCH_powerpc'],
+-  'ppc64'       : ['-D__powerpc64__', '-D__TARGET_ARCH_powerpc', '-D_CALL_ELF=2'],
++  'ppc64'       : ['-D__powerpc64__', '-D__TARGET_ARCH_powerpc', '-D_CALL_ELF=' + ppc64_elf_version],
+   'riscv32'     : ['-D__riscv', '-D__riscv_xlen=32', '-D__TARGET_ARCH_riscv'],
+   'riscv64'     : ['-D__riscv', '-D__riscv_xlen=64', '-D__TARGET_ARCH_riscv'],
+   'x86'         : ['-D__i386__', '-D__TARGET_ARCH_x86'],

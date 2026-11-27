@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = configure ]; then
+    nmcli general reload 2>/dev/null || true
+fi
+
+#DEBHELPER#

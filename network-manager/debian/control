@@ -1,0 +1,229 @@
+Source: network-manager
+Section: net
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.org>
+Uploaders: Michael Biebl <biebl@debian.org>
+Build-Depends: debhelper-compat (= 13),
+               dh-sequence-gir,
+               meson (>= 0.51.0),
+               pkgconf,
+               gettext (>= 0.19.8),
+               libglib2.0-dev (>= 2.42),
+               ppp-dev,
+               libselinux-dev,
+               libaudit-dev,
+               libgnutls28-dev (>= 2.12),
+               uuid-dev,
+               systemd-dev,
+               libsystemd-dev (>= 209),
+               libudev-dev (>= 175),
+               libgirepository1.0-dev,
+               gir1.2-girepository-2.0,
+               gir1.2-girepository-2.0-dev,
+               gobject-introspection,
+               python3-gi,
+               libpsl-dev (>= 0.1),
+               libcurl4-openssl-dev (>= 7.24.0),
+               gtk-doc-tools,
+               libglib2.0-doc,
+               libmm-glib-dev (>=  0.7.991),
+               libreadline-dev,
+               libnewt-dev (>= 0.52.15),
+               libteam-dev (>= 1.9),
+               libjansson-dev (>= 2.7),
+               libbluetooth-dev (>= 5),
+               libdbus-1-dev,
+               libpolkit-gobject-1-dev,
+               mobile-broadband-provider-info,
+               valac,
+               libpolkit-gobject-1-dev,
+               dbus-daemon <!nocheck>,
+               python3-dbus <!nocheck>,
+               python3-pexpect <!nocheck>,
+               iproute2 <!nocheck>,
+               libbpf-dev (>= 1.3.0) [!i386],
+               clang,
+               llvm,
+               linux-tools-generic,
+               libtool,
+               libyaml-dev [!i386],
+               libnetplan-dev (>= 1.0) [!i386],
+               netplan.io (>= 1.0) [!i386] <!nocheck>,
+Standards-Version: 4.7.4
+XS-Debian-Vcs-Git: https://salsa.debian.org/utopia-team/network-manager.git
+XS-Debian-Vcs-Browser: https://salsa.debian.org/utopia-team/network-manager
+Vcs-Git: https://git.launchpad.net/network-manager
+Vcs-Browser: https://git.launchpad.net/network-manager
+Homepage: https://networkmanager.dev/
+
+Package: network-manager
+Architecture: linux-any
+Depends: ${misc:Depends}, ${shlibs:Depends},
+         libnm0 (= ${binary:Version}),
+         netplan.io (>= 1.0) [!i386],
+         default-dbus-system-bus | dbus-system-bus,
+Recommends: ppp,
+            dnsmasq-base,
+            modemmanager,
+            network-manager-pptp,
+            wireless-regdb,
+            wpasupplicant,
+            libpam-systemd,
+            polkitd,
+            udev,
+            network-manager-l10n,
+          network-manager-tui,
+Suggests: avahi-autoipd,
+          network-manager-ovs,
+          network-manager-team,
+          nftables | iptables,
+Description: network management framework (daemon and userspace tools)
+ NetworkManager is a system network service that manages your network devices
+ and connections, attempting to keep active network connectivity when
+ available. It manages ethernet, Wi-Fi, mobile broadband (WWAN), and PPPoE
+ devices, and provides VPN integration with a variety of different VPN
+ services.
+ .
+ This package provides the userspace daemons and a command line interface to
+ interact with NetworkManager.
+ .
+ Optional dependencies:
+  * avahi-autoipd: Used for IPv4LL, a protocol for automatic Link-Local IP
+    address configuration.
+  * ppp: Required for establishing dial-up connections (e.g. via GSM).
+  * dnsmasq-base/nftables or iptables: Required for creating Ad-hoc connections
+    and connection sharing.
+
+Package: network-manager-tui
+Architecture: linux-any
+Depends: ${misc:Depends}, ${shlibs:Depends},
+         libnm0 (= ${binary:Version}),
+Breaks: network-manager (<< 1.56.0-4~)
+Replaces: network-manager (<< 1.56.0-4~)
+Description: NetworkManager curses-based UI
+ This package contains nmtui, a curses-based "TUI" (Text User Interface) for
+ NetworkManager, to allow performing some of the operations supported by
+ nm-connection-editor and nm-applet in a non-graphical environment.
+
+Package: network-manager-ovs
+Architecture: linux-any
+Depends: ${misc:Depends}, ${shlibs:Depends},
+         libnm0 (= ${binary:Version}),
+Recommends: openvswitch-switch,
+Description: Open vSwitch device plugin for NetworkManager
+ This package contains NetworkManager support for Open vSwitch bridges.
+
+Package: network-manager-team
+Architecture: linux-any
+Depends: ${misc:Depends}, ${shlibs:Depends},
+         libnm0 (= ${binary:Version}),
+Recommends: libteam-utils,
+Breaks: network-manager (<< 1.56.0-3~)
+Replaces: network-manager (<< 1.56.0-3~)
+Description: Team device plugin for NetworkManager
+ This package contains NetworkManager support for team devices.
+
+Package: network-manager-dev
+Section: devel
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: network management framework (development files)
+ This package provides documentation of the NetworkManager D-Bus API, the
+ configuration formats and command line utilities.
+ It also provides D-Bus introspection files.
+
+Package: network-manager-l10n
+Section: localization
+Architecture: all
+Multi-Arch: foreign
+Breaks: network-manager (<< 1.52.0-3~)
+Replaces: network-manager (<< 1.52.0-3~)
+Depends: ${misc:Depends}
+Description: network management framework (translation files)
+ This package provides translations for messages of the programs found in the
+ network-manager package.
+
+Package: libnm0
+Section: libs
+Architecture: linux-any
+Multi-Arch: same
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: GObject-based client library for NetworkManager
+ NetworkManager is a system network service that manages your network devices
+ and connections, attempting to keep active network connectivity when
+ available. It manages ethernet, Wi-Fi, mobile broadband (WWAN), and PPPoE
+ devices, and provides VPN integration with a variety of different VPN
+ services.
+ .
+ This package contains a convenience library to ease the access to
+ NetworkManager.
+
+Package: libnm-dev
+Section: libdevel
+Architecture: linux-any
+Multi-Arch: same
+Depends: ${misc:Depends}, gir1.2-nm-1.0 (= ${binary:Version}),
+         libnm0 (= ${binary:Version}),
+         libglib2.0-dev
+Description: GObject-based client library for NetworkManager (development files)
+ NetworkManager is a system network service that manages your network devices
+ and connections, attempting to keep active network connectivity when
+ available. It manages ethernet, Wi-Fi, mobile broadband (WWAN), and PPPoE
+ devices, and provides VPN integration with a variety of different VPN
+ services.
+ .
+ This package contains header and development files.
+
+Package: gir1.2-nm-1.0
+Section: introspection
+Architecture: linux-any
+Multi-Arch: same
+Depends: ${misc:Depends}, ${gir:Depends}, ${shlibs:Depends}
+Description: GObject introspection data for the libnm library
+ NetworkManager is a system network service that manages your network devices
+ and connections, attempting to keep active network connectivity when
+ available. It manages ethernet, Wi-Fi, mobile broadband (WWAN), and PPPoE
+ devices, and provides VPN integration with a variety of different VPN
+ services.
+ .
+ This package contains introspection data for NetworkManager using libnm.
+ .
+ It can be used by packages using the GIRepository format to generate
+ dynamic bindings.
+
+Package: network-manager-config-connectivity-debian
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends},
+         network-manager (>= ${source:Version})
+Description: NetworkManager configuration to enable connectivity checking
+ This package contains a configuration file which enables NetworkManager's
+ connectivity checking functionality.
+ .
+ NetworkManager will try to connect to a Debian server to determine the
+ connection status.
+ .
+ This is particularly useful for captive portal detection.
+ .
+ No user data is transmitted in the connectivity checks, but merely contacting
+ the Debian connectivity check servers reveals that the user is running a
+ Debian(-based) operating system with NetworkManager.
+
+Package: network-manager-config-connectivity-ubuntu
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends},
+         network-manager (>= ${source:Version})
+Description: NetworkManager configuration to enable connectivity checking
+ This package contains a configuration file which enables NetworkManager's
+ connectivity checking functionality.
+ .
+ NetworkManager will try to connect to an Ubuntu server to determine the
+ connection status.
+ .
+ This is particularly useful for captive portal detection.
+ .
+ No user data is transmitted in the connectivity checks, but merely contacting
+ the Ubuntu connectivity check servers reveals that the user is running an
+ Ubuntu(-based) operating system with NetworkManager.

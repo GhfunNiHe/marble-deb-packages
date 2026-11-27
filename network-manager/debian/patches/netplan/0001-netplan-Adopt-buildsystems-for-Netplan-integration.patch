@@ -1,0 +1,83 @@
+From: =?utf-8?q?Lukas_M=C3=A4rdian?= <slyon@ubuntu.com>
+Date: Tue, 9 May 2023 17:09:48 +0200
+Subject: [PATCH 1/2] netplan: Adopt buildsystems for Netplan integration
+
+Meson will define a "WITH_NETPLAN" variable with the
+values 1 or 0 accordingly, using the config.h header.
+---
+ config.h.meson       |  2 ++
+ meson.build          | 10 ++++++++++
+ meson_options.txt    |  1 +
+ src/core/meson.build |  1 +
+ 4 files changed, 14 insertions(+)
+
+Index: network-manager-1.58.0-2ubuntu1/config.h.meson
+===================================================================
+--- network-manager-1.58.0-2ubuntu1.orig/config.h.meson
++++ network-manager-1.58.0-2ubuntu1/config.h.meson
+@@ -291,3 +291,6 @@
+ 
+ /* Define to 1 if you want CLAT support. */
+ #mesondefine HAVE_CLAT
++
++/* Define to 1 to enable integration with Netplan */
++#mesondefine WITH_NETPLAN
+Index: network-manager-1.58.0-2ubuntu1/meson.build
+===================================================================
+--- network-manager-1.58.0-2ubuntu1.orig/meson.build
++++ network-manager-1.58.0-2ubuntu1/meson.build
+@@ -316,6 +316,8 @@ config_h.set10('HAVE_LIBSYSTEMD', libsys
+ 
+ systemd_dep = dependency('systemd', required: false)
+ 
++libnetplan_dep = dependency('netplan', version: '>= 0.106', required: false)
++
+ gio_unix_dep = dependency('gio-unix-2.0', version: '>= 2.42')
+ 
+ glib_dep = declare_dependency(
+@@ -723,6 +725,13 @@ if enable_ovs
+ endif
+ config_h.set10('WITH_OPENVSWITCH', enable_ovs)
+ 
++# Netplan integration
++enable_netplan = get_option('netplan')
++if enable_netplan
++  assert(libnetplan_dep.found(), 'libnetplan is needed for Netplan integration.')
++endif
++config_h.set10('WITH_NETPLAN', enable_netplan)
++
+ # DNS resolv.conf managers
+ config_dns_rc_manager_default = get_option('config_dns_rc_manager_default')
+ config_h.set_quoted('NM_CONFIG_DEFAULT_MAIN_RC_MANAGER', config_dns_rc_manager_default)
+@@ -1156,6 +1165,7 @@ output += '  concheck: ' + enable_conche
+ output += '  libteamdctl: ' + enable_teamdctl.to_string() + '\n'
+ output += '  ovs: ' + enable_ovs.to_string() + '\n'
+ output += '  clat: ' + enable_clat.to_string() + '\n'
++output += '  netplan: ' + enable_netplan.to_string() + '\n'
+ output += '  nmcli: ' + enable_nmcli.to_string() + '\n'
+ output += '  nmtui: ' + enable_nmtui.to_string() + '\n'
+ output += '  nm-cloud-setup: ' + enable_nm_cloud_setup.to_string() + '\n'
+Index: network-manager-1.58.0-2ubuntu1/meson_options.txt
+===================================================================
+--- network-manager-1.58.0-2ubuntu1.orig/meson_options.txt
++++ network-manager-1.58.0-2ubuntu1/meson_options.txt
+@@ -42,6 +42,7 @@ option('ofono', type: 'boolean', value:
+ option('concheck', type: 'boolean', value: true, description: 'enable connectivity checking support')
+ option('teamdctl', type: 'boolean', value: false, description: 'enable Teamd control support')
+ option('ovs', type: 'boolean', value: true, description: 'enable Open vSwitch support')
++option('netplan', type: 'boolean', value: true, description: 'Enable Netplan integration')
+ option('nmcli', type: 'boolean', value: true, description: 'Build nmcli')
+ option('nmtui', type: 'boolean', value: true, description: 'Build nmtui')
+ option('nm_cloud_setup', type: 'boolean', value: true, description: 'Build nm-cloud-setup, a tool for automatically configuring networking in cloud')
+Index: network-manager-1.58.0-2ubuntu1/src/core/meson.build
+===================================================================
+--- network-manager-1.58.0-2ubuntu1.orig/src/core/meson.build
++++ network-manager-1.58.0-2ubuntu1/src/core/meson.build
+@@ -80,6 +80,7 @@ nm_deps = [
+   dl_dep,
+   libudev_dep,
+   logind_dep,
++  libnetplan_dep,
+ ]
+ 
+ if enable_concheck

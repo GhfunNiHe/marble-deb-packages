@@ -1,0 +1,1 @@
+debian/20-connectivity-debian.conf usr/lib/NetworkManager/conf.d/

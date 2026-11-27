@@ -1,0 +1,52 @@
+From: =?utf-8?q?St=C3=A9phane_Graber?= <stephane.graber@canonical.com>
+Date: Thu, 12 May 2016 22:44:06 +0800
+Subject: Update dnsmasq parameters
+
+Disable caching since it's a potential security issue (local dns cache poisoning).
+
+See also: https://blueprints.launchpad.net/ubuntu/+spec/foundations-p-dns-resolving
+---
+ src/core/dns/nm-dns-dnsmasq.c | 4 ++--
+ src/core/dns/nm-dns-manager.c | 6 +++---
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+--- a/src/core/dns/nm-dns-dnsmasq.c
++++ b/src/core/dns/nm-dns-dnsmasq.c
+@@ -523,9 +523,9 @@ _gl_pid_spawn_next_step(void)
+     argv[argv_idx++] = "--no-hosts"; /* don't use /etc/hosts to resolve */
+     argv[argv_idx++] = "--bind-dynamic";
+     argv[argv_idx++] = "--pid-file=" PIDFILE;
+-    argv[argv_idx++] = "--listen-address=127.0.0.1";
++    argv[argv_idx++] = "--listen-address=127.0.1.1";
+     argv[argv_idx++] = "--listen-address=::1";
+-    argv[argv_idx++] = "--cache-size=400";
++    argv[argv_idx++] = "--cache-size=0";
+     argv[argv_idx++] = "--clear-on-reload";     /* clear cache when dns server changes */
+     argv[argv_idx++] = "--conf-file=/dev/null"; /* avoid loading /etc/dnsmasq.conf */
+     argv[argv_idx++] = "--enable-dbus=" DNSMASQ_DBUS_SERVICE;
+--- a/src/core/dns/nm-dns-manager.c
++++ b/src/core/dns/nm-dns-manager.c
+@@ -1894,12 +1894,12 @@ plugin_skip:;
+                                NM_CAST_STRV_CC(nameservers),
+                                NM_CAST_STRV_CC(options));
+ 
+-    /* If caching was successful, we only send 127.0.0.1 to /etc/resolv.conf
++    /* If caching was successful, we only send 127.0.1.1 to /etc/resolv.conf
+      * to ensure that the glibc resolver doesn't try to round-robin nameservers,
+      * but only uses the local caching nameserver.
+      */
+     if (caching) {
+-        const char *lladdr = "127.0.0.1";
++        const char *lladdr = "127.0.1.1";
+         gboolean    need_edns0;
+         gboolean    need_trust;
+ 
+@@ -2326,7 +2326,7 @@ nm_dns_manager_stop(NMDnsManager *self)
+     _LOGT("stopping...");
+ 
+     /* If we're quitting, leave a valid resolv.conf in place, not one
+-     * pointing to 127.0.0.1 if dnsmasq was active.  But if we haven't
++     * pointing to 127.0.1.1 if dnsmasq was active.  But if we haven't
+      * done any DNS updates yet, there's no reason to touch resolv.conf
+      * on shutdown.
+      */

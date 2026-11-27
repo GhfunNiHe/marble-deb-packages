@@ -1,0 +1,3 @@
+# Members of group netdev get access to the PolicyKit action
+# org.freedesktop.NetworkManager.settings.modify.system without prior authentication
+g netdev

@@ -1,0 +1,93 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/architecture.mk
+
+ifeq ($(shell dpkg-vendor --is Ubuntu && echo yes) $(DEB_HOST_ARCH), yes i386)
+   BUILD_PACKAGES += -Nnetwork-manager
+   NETPLAN += -Dnetplan=false
+   CLAT += -Dclat=false
+else
+   NETPLAN += -Dnetplan=true
+   CLAT += -Dclat=true
+endif
+
+# Disable lto here regardless of whether we enable the configure flag
+# https://gitlab.freedesktop.org/NetworkManager/NetworkManager/-/issues/1070
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all optimize=-lto
+
+export PYTHON=/usr/bin/python3
+
+PPPD_PLUGIN_DIR := $(shell dh_ppp --plugin-dir)
+
+%:
+	dh $@ --with installsysusers $(BUILD_PACKAGES)
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-Druntime_dir=/run \
+		-Dpppd_plugin_dir=$(PPPD_PLUGIN_DIR) \
+		-Dpppd_extra_versions=$(shell ls -1 debian/ppp-headers | paste -sd, -) \
+		-Dpppd=/usr/sbin/pppd \
+		-Dresolvconf=/usr/sbin/resolvconf \
+		-Dmodprobe=/usr/sbin/modprobe \
+		-Ddhcpcd=no \
+		-Diptables=/usr/sbin/iptables \
+		-Dip6tables=/usr/sbin/ip6tables \
+		-Dnft=/usr/sbin/nft \
+		-Ddnsmasq=/usr/sbin/dnsmasq \
+		-Dpolkit_agent_helper_1=/usr/lib/policykit-1/polkit-agent-helper-1 \
+		-Dudev_dir=/usr/lib/udev \
+		-Ddbus_conf_dir=/usr/share/dbus-1/system.d \
+		-Dcrypto=gnutls \
+		-Dsession_tracking=systemd \
+		-Dsuspend_resume=systemd \
+		-Dmodem_manager=true \
+		-Dnmtui=true \
+		-Dnmcli=true \
+		-Dselinux=true \
+		-Dsystemd_journal=true \
+		-Dlibaudit=yes \
+		-Dwifi=true \
+		-Diwd=true \
+		-Dppp=true \
+		-Dpolkit=true \
+		-Dintrospection=true \
+		-Ddocs=true \
+		-Dconcheck=true \
+		-Dteamdctl=true \
+		-Dbluez5_dun=true \
+		-Dvapi=true \
+		-Difupdown=true \
+		-Difcfg_rh=false \
+		-Dnm_cloud_setup=false \
+		-Dmodify_system=false \
+		-Dovs=true \
+		-Dqt=false \
+		-Debpf=false \
+		$(CLAT) \
+		-Dbpf-compiler=clang \
+		-Dnbft=false \
+		-Dtests=yes \
+		-Db_lto=false \
+		$(NETPLAN) \
+		-Dofono=true
+
+execute_after_dh_auto_install:
+	# Those initrd specific services are not actually used by dracut and
+	# conflict with the main services, so remove them for now.
+	# https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1117732
+	rm -f debian/tmp/usr/lib/systemd/system/NetworkManager-config-initrd.service
+	rm -f debian/tmp/usr/lib/systemd/system/NetworkManager-wait-online-initrd.service
+	rm -f debian/tmp/usr/lib/systemd/system/NetworkManager-initrd.service
+	rm -f debian/tmp/usr/lib/systemd/system-generators/nm-initrd-generator.sh
+
+override_dh_makeshlibs:
+	dh_makeshlibs -X/usr/lib/$(DEB_HOST_MULTIARCH)/NetworkManager/ -X/usr/lib/pppd/
+
+override_dh_installsystemd:
+	dh_installsystemd -pnetwork-manager --no-start NetworkManager-dispatcher.service NetworkManager-wait-online.service nm-priv-helper.service
+	dh_installsystemd -pnetwork-manager --no-also NetworkManager.service
+
+override_dh_auto_test:
+	# workaround for slower architectures like hppa, see #1075915
+	dh_auto_test -- --timeout-multiplier 2

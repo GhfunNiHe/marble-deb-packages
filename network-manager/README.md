@@ -13,15 +13,18 @@ run these commands as root from the repository root.
 
 ```sh
 apt-get update
-apt-get install -y --no-install-recommends build-essential ca-certificates fakeroot
+apt-get install -y --no-install-recommends build-essential ca-certificates fakeroot git
 DEB_BUILD_OPTIONS=nocheck DEB_BUILD_PROFILES=nocheck network-manager/build out
 ```
 
-In **Run workflow**, leave the NetworkManager fields empty to build the pinned
-Ubuntu version. To build another Ubuntu source package, enter its `.dsc` URL
-and SHA-256. The files listed in the descriptor must be available alongside
-it, and the marble patches must apply to that version. The build checks the
-source archives against the descriptor and uses its source version in the DEBs.
+In **Run workflow**, select a NetworkManager Git repository and a tag, branch,
+or commit. The default builds the upstream release tag from the package
+changelog. For a local build, set `SRC_NETWORKMANAGER_REPO` and
+`SRC_NETWORKMANAGER_REF` to override the same settings.
+
+The build applies this repository's `debian/` directory to the checkout.
+The packaging and Ubuntu patches come from
+[Ubuntu 1.58.1-1ubuntu3.1](https://launchpad.net/ubuntu/+source/network-manager/1.58.1-1ubuntu3.1).
 Noble builds libndp 1.9 from source for the IPv6-only cellular network
 translation code (464XLAT). The PPP plugins use the pppd headers for the ABI
 versions installed by the supported images.

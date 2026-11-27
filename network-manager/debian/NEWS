@@ -1,0 +1,16 @@
+network-manager (1.44.2-2) unstable; urgency=medium
+
+  NetworkManager or rather NetworkManager-dispatcher will no longer execute
+  ifupdown hook scripts from /etc/network/if-*.d/ on network state changes.
+
+  Packages that want to be notified and react on such network state changes
+  are advised to ship native NetworkManager scripts in
+  /usr/lib/NetworkManager/dispatcher.d.
+
+  Users may provide local hook scripts or override package provided ones by
+  installing those into /etc/NetworkManager/dispatcher.d.
+
+  For further information about the NetworkManager-dispatcher interface see
+  the NetworkManager-dispatcher(8) man page.
+
+ -- Michael Biebl <biebl@debian.org>  Wed, 18 Oct 2023 13:55:54 +0200

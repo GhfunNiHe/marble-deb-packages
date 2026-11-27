@@ -5,8 +5,10 @@ overlay=$(dirname "$(realpath "$0")")
 output=$(realpath -m "${1:-out}")
 cache=$(realpath -m "${RUNNER_TEMP:-$PWD}/build/network-manager")
 package_version=$(dpkg-parsechangelog -l "$overlay/debian/changelog" -S Version)
-ubuntu_version=${package_version%+marble*}
-ubuntu=https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/network-manager/$ubuntu_version
+upstream=https://gitlab.freedesktop.org/NetworkManager/NetworkManager
+repo=${SRC_NETWORKMANAGER_REPO:-$upstream}
+default_tag=${package_version%-*}
+ref=${SRC_NETWORKMANAGER_REF:-$default_tag}
 snapshot=https://snapshot.debian.org/archive/debian/20261119T000000Z/pool/main
 
 mkdir -p "$output" "$cache"
@@ -14,59 +16,34 @@ cd "$cache"
 work=$(mktemp -d "$cache/build.XXXXXXXX")
 trap 'rm -rf "$work"' EXIT
 
-fetch() {
-    if ! printf '%s  %s\n' "$3" "$2" | sha256sum --check --status 2>/dev/null; then
-        /usr/lib/apt/apt-helper download-file "$1" "$2" "SHA256:$3"
-    fi
-}
-
 while read -r digest archive; do
     case "$archive" in
-        network-manager_*.dsc)
-            url=${NETWORKMANAGER_SRC_DSC:-$ubuntu/$archive}
-            srcdir=$cache
-            if [ -n "${NETWORKMANAGER_SRC_DSC:-}" ]; then
-                srcdir=$work
-            fi
-            dsc=$srcdir/${url##*/}
-            fetch "$url" "$dsc" "${NETWORKMANAGER_SRC_SHA256:-$digest}"
-            awk '/^Checksums-Sha256:/ { files=1; next } !/^ / { files=0 } files { print $1, $3 }' "$dsc" |
-            while read -r sha file; do
-                case "$file" in
-                    ""|.*|*/*) echo "Invalid source archive name: $file" >&2; exit 1 ;;
-                esac
-                fetch "${url%/*}/$file" "$srcdir/$file" "$sha"
-            done
-            continue ;;
         libndp_*) pool=$snapshot/libn/libndp ;;
         ppp-dev_*) pool=$snapshot/p/ppp ;;
     esac
-    fetch "$pool/$archive" "$archive" "$digest"
+    if ! printf '%s  %s\n' "$digest" "$archive" | sha256sum --check --status 2>/dev/null; then
+        /usr/lib/apt/apt-helper download-file "$pool/$archive" "$archive" "SHA256:$digest"
+    fi
 done < "$overlay/SHA256SUMS"
 
-cd "$work"
-dpkg-source -x "$dsc" src
-cd src
-if [ "$(dpkg-parsechangelog -S Source)" != network-manager ]; then
-    echo "Expected a network-manager source package" >&2
-    exit 1
-fi
-source_version=$(dpkg-parsechangelog -S Version)
-patch -p1 < "$overlay/packaging-noble.patch"
-cp "$overlay"/debian/patches/*.patch debian/patches/
-cat "$overlay/debian/patches/series" >> debian/patches/series
-{
-    sed "1s/([^)]*)/(${source_version}+${package_version##*+})/" "$overlay/debian/changelog"
-    printf '\n'
-    cat debian/changelog
-} > debian/changelog.marble
-mv debian/changelog.marble debian/changelog
+git init -q "$work/src"
+cd "$work/src"
+GIT_TERMINAL_PROMPT=0 timeout 5m git fetch --depth 1 -- "$repo" "$ref"
+git checkout -q --detach FETCH_HEAD
+git log -1 --format='Building NetworkManager from %H'
+rm -rf -- debian
+cp -a "$overlay/debian" .
 mkdir -p debian/ppp-headers
 for archive in "$cache"/ppp-dev_*.deb; do
     version=$(dpkg-deb -f "$archive" Version)
     dpkg-deb -x "$archive" "debian/ppp-headers/${version%%-*}"
 done
 dpkg-checkbuilddeps || apt-get build-dep -y --no-install-recommends .
+if [ "$ref" != "$default_tag" ] || [ "$repo" != "$upstream" ]; then
+    upstream_version=$(meson introspect --projectinfo meson.build | python3 -c 'import json, sys; print(json.load(sys.stdin)["version"])')
+    revision=$(git show -s --format='%ct.%h' HEAD)
+    sed -i "1s/([^)]*)/(${upstream_version}+git${revision}-${package_version##*-})/" debian/changelog
+fi
 
 # CLAT uses the PREF64 router advertisement API added in libndp 1.9.
 # Build the static library with the same compiler and libc as NetworkManager.

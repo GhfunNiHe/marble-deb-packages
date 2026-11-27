@@ -85,12 +85,14 @@ on:
         description: 'ModemManager 的 tag/分支/提交（留空 = modemmanager/COMMIT）'
         type: string
         default: ''
-      networkmanager_src_dsc:
-        description: 'NetworkManager 的 Ubuntu 源码包 .dsc 链接（留空使用仓库指定版本）'
+      networkmanager_src_repo:
+        description: 'NetworkManager 源码仓库地址 (repo URL)'
         type: string
-      networkmanager_src_sha256:
-        description: '所选 .dsc 的 SHA-256（使用默认版本或其镜像时可留空）'
+        default: 'https://gitlab.freedesktop.org/NetworkManager/NetworkManager'
+      networkmanager_src_ref:
+        description: 'NetworkManager 的 tag/分支/提交（留空使用 changelog 中的上游版本）'
         type: string
+        default: ''
       libssc_src_repo:
         description: 'libssc 源码仓库地址 (repo URL)'
         type: string
@@ -319,8 +321,8 @@ jobs:
       - name: "Build: network-manager"
         env:
           DEB_BUILD_PROFILES: nocheck
-          NETWORKMANAGER_SRC_DSC: ${{ inputs.networkmanager_src_dsc }}
-          NETWORKMANAGER_SRC_SHA256: ${{ inputs.networkmanager_src_sha256 }}
+          SRC_NETWORKMANAGER_REPO: ${{ inputs.networkmanager_src_repo }}
+          SRC_NETWORKMANAGER_REF: ${{ inputs.networkmanager_src_ref }}
         run: network-manager/build "$GITHUB_WORKSPACE/out"
 
       - name: "Build: callaudiod"
