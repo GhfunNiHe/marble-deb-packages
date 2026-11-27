@@ -1,3 +1,12 @@
+linux-xiaomi-marble (7.2.8+marble5) UNRELEASED; urgency=medium
+
+  * Enable the NFC reader and infrared transmitter using LazyBonesLZY's
+    board wiring. Include the SPI infrared driver and LIRC interface.
+  * Restore the QUP1 DMA mapping and use the A1NOC interconnect for its
+    serial engines.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 19:10:00 +0800
+
 linux-xiaomi-marble (7.2.8+marble4) UNRELEASED; urgency=medium
 
   * Power the top microphone from MIC BIAS4 and give its ADC a separate
