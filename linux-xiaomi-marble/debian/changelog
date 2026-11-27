@@ -1,3 +1,13 @@
+linux-xiaomi-marble (7.2.8+marble2) unstable; urgency=medium
+
+  * Restore the AW88263S amplifier profile's ultrasound setting on wake
+    and send silence to the upper amplifier's ultrasound input during
+    stereo playback.
+  * Apply mute and sample-rate changes to both TX decimators used by
+    the call microphone.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 12:19:00 +0800
+
 linux-xiaomi-marble (7.2.8+marble1) unstable; urgency=medium
 
   * Enable the camera clock controller and LazyBonesLZY's GC02M1 macro
