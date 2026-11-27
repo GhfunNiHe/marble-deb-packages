@@ -1,0 +1,720 @@
+Description: Reacquire phone audio devices after card and profile changes
+ PipeWire can announce a replacement source or sink before it removes the
+ old index. Discover the current card and its nodes after hotplug, and let
+ requests wait for publication during startup and profile changes.
+Forwarded: no
+
+--- a/src/cad-pulse.c
++++ b/src/cad-pulse.c
+@@ -39,12 +39,13 @@
+     pa_glib_mainloop  *loop;
+     pa_context        *ctx;
+ 
+-    int card_id;
+-    int sink_id;
+-    int source_id;
++    uint32_t card_id;
++    uint32_t sink_id;
++    uint32_t source_id;
+ 
+     gboolean has_voice_profile;
+-    guint speaker_request;
++    guint requests[CAD_OPERATION_MUTE_MIC + 1];
++    gboolean selecting_mode;
+     gchar *speaker_port;
+     gchar *earpiece_port;
+ 
+@@ -62,7 +63,10 @@
+     CadPulse *pulse;
+     CadOperation *op;
+     guint value;
+-    guint speaker_request;
++    guint request;
++    gboolean profile_checked;
++    uint32_t endpoint_id;
++    gint64 deadline;
+ } CadPulseOperation;
+ 
+ static void pulseaudio_cleanup(CadPulse *self);
+@@ -159,7 +163,7 @@
+         return;
+     if (info->monitor_of_sink != PA_INVALID_INDEX)
+         return;
+-    if (info->card != self->card_id || self->source_id != -1)
++    if (info->card != self->card_id || self->source_id != PA_INVALID_INDEX)
+         return;
+ 
+     self->source_id = info->index;
+@@ -194,15 +198,18 @@
+         return;
+     }
+ 
++    if (self->source_id != PA_INVALID_INDEX)
++        return;
++
+     process_new_source(self, info);
+-    if (self->source_id < 0 || self->source_id != info->index)
++    if (self->source_id == PA_INVALID_INDEX || self->source_id != info->index)
+         return;
+ 
+     op = pa_context_set_default_source(ctx, info->name, NULL, NULL);
+     if (op)
+         pa_operation_unref(op);
+ 
+-    if (self->mic_state == CALL_AUDIO_MIC_UNKNOWN) {
++    if (self->mic_state != (info->mute ? CALL_AUDIO_MIC_OFF : CALL_AUDIO_MIC_ON)) {
+         if (info->mute)
+             self->mic_state = CALL_AUDIO_MIC_OFF;
+         else
+@@ -307,7 +314,7 @@
+     prop = pa_proplist_gets(info->proplist, PA_PROP_DEVICE_CLASS);
+     if (prop && g_strcmp0(prop, SINK_CLASS) != 0)
+         return;
+-    if (info->card != self->card_id || self->sink_id != -1)
++    if (info->card != self->card_id || self->sink_id != PA_INVALID_INDEX)
+         return;
+ 
+     self->sink_id = info->index;
+@@ -372,8 +379,11 @@
+         return;
+     }
+ 
++    if (self->sink_id != PA_INVALID_INDEX)
++        return;
++
+     process_new_sink(self, info);
+-    if (self->sink_id < 0 || self->sink_id != info->index)
++    if (self->sink_id == PA_INVALID_INDEX || self->sink_id != info->index)
+         return;
+ 
+     op = pa_context_set_default_sink(ctx, info->name, NULL, NULL);
+@@ -535,21 +545,65 @@
+     }
+ }
+ 
++static void forget_sink(CadPulse *self)
++{
++    self->sink_id = PA_INVALID_INDEX;
++    g_clear_pointer(&self->sink_ports, g_hash_table_destroy);
++    g_clear_pointer(&self->speaker_port, g_free);
++    g_clear_pointer(&self->earpiece_port, g_free);
++}
++
++static void forget_source(CadPulse *self)
++{
++    self->source_id = PA_INVALID_INDEX;
++    g_clear_pointer(&self->source_ports, g_hash_table_destroy);
++}
++
++static void forget_card(CadPulse *self)
++{
++    forget_sink(self);
++    forget_source(self);
++    self->card_id = PA_INVALID_INDEX;
++    self->has_voice_profile = FALSE;
++    self->selecting_mode = FALSE;
++    for (guint i = 0; i < G_N_ELEMENTS(self->requests); i++)
++        self->requests[i]++;
++    self->audio_mode = CALL_AUDIO_MODE_UNKNOWN;
++    self->speaker_state = CALL_AUDIO_SPEAKER_UNKNOWN;
++    self->mic_state = CALL_AUDIO_MIC_UNKNOWN;
++    g_object_set(self->manager, "audio-mode", self->audio_mode,
++                 "speaker-state", self->speaker_state, "mic-state", self->mic_state, NULL);
++}
++
++/* A new node can be published before the old node's removal notification. */
++static void find_endpoints(CadPulse *self)
++{
++    pa_operation *op;
++
++    if (self->card_id == PA_INVALID_INDEX)
++        return;
++    if (self->sink_id == PA_INVALID_INDEX) {
++        op = pa_context_get_sink_info_list(self->ctx, init_sink_info, self);
++        if (op)
++            pa_operation_unref(op);
++    }
++    if (self->source_id == PA_INVALID_INDEX) {
++        op = pa_context_get_source_info_list(self->ctx, init_source_info, self);
++        if (op)
++            pa_operation_unref(op);
++    }
++}
++
+ static void init_card_info(pa_context *ctx, const pa_card_info *info, int eol, void *data)
+ {
+     CadPulse *self = data;
+-    pa_operation *op;
+     const gchar *prop;
+     gboolean has_speaker = FALSE;
+     gboolean has_earpiece = FALSE;
+     guint i;
+ 
+-    if (eol != 0) {
+-        if (self->card_id < 0) {
+-            g_critical("No suitable card found, stopping here...");
+-        }
+-        return;
+-    }
++    if (eol || self->card_id != PA_INVALID_INDEX)
++        return;
+ 
+     if (!info) {
+         g_critical("PA returned no card info (eol=%d)", eol);
+@@ -604,13 +658,7 @@
+ 
+     g_debug("CARD:   %s voice profile", self->has_voice_profile ? "has" : "doesn't have");
+ 
+-    /* Found a suitable card, let's prepare the sink/source */
+-    op = pa_context_get_sink_info_list(self->ctx, init_sink_info, self);
+-    if (op)
+-        pa_operation_unref(op);
+-    op = pa_context_get_source_info_list(self->ctx, init_source_info, self);
+-    if (op)
+-        pa_operation_unref(op);
++    find_endpoints(self);
+ }
+ 
+ /******************************************************************************
+@@ -670,9 +718,6 @@
+ {
+     CadPulse *self = data;
+     pa_operation *op;
+-
+-    self->card_id = self->sink_id = self->source_id = -1;
+-    self->sink_ports = self->source_ports = NULL;
+ 
+     op = pa_context_get_card_info_list(self->ctx, init_card_info, self);
+     if (op)
+@@ -697,10 +742,9 @@
+     case PA_SUBSCRIPTION_EVENT_SINK:
+         if (idx == self->sink_id && kind == PA_SUBSCRIPTION_EVENT_REMOVE) {
+             g_debug("sink %u removed", idx);
+-            self->sink_id = -1;
+-            g_hash_table_destroy(self->sink_ports);
+-            self->sink_ports = NULL;
+-        } else if (kind == PA_SUBSCRIPTION_EVENT_NEW) {
++            forget_sink(self);
++            find_endpoints(self);
++        } else if (kind != PA_SUBSCRIPTION_EVENT_REMOVE && self->sink_id == PA_INVALID_INDEX) {
+             g_debug("new sink %u", idx);
+             op = pa_context_get_sink_info_by_index(ctx, idx, init_sink_info, self);
+             if (op)
+@@ -710,10 +754,9 @@
+     case PA_SUBSCRIPTION_EVENT_SOURCE:
+         if (idx == self->source_id && kind == PA_SUBSCRIPTION_EVENT_REMOVE) {
+             g_debug("source %u removed", idx);
+-            self->source_id = -1;
+-            g_hash_table_destroy(self->source_ports);
+-            self->source_ports = NULL;
+-        } else if (kind == PA_SUBSCRIPTION_EVENT_NEW) {
++            forget_source(self);
++            find_endpoints(self);
++        } else if (kind != PA_SUBSCRIPTION_EVENT_REMOVE && self->source_id == PA_INVALID_INDEX) {
+             g_debug("new source %u", idx);
+             op = pa_context_get_source_info_by_index(ctx, idx, init_source_info, self);
+             if (op)
+@@ -721,21 +764,28 @@
+         }
+         break;
+     case PA_SUBSCRIPTION_EVENT_CARD:
+-        if (self->card_id < 0 && kind == PA_SUBSCRIPTION_EVENT_NEW) {
+-            g_debug("card %u added, but no valid card detected yet, retrying...", idx);
+-            g_idle_add(init_pulseaudio_objects, self);
++        if (kind == PA_SUBSCRIPTION_EVENT_REMOVE && idx == self->card_id) {
++            forget_card(self);
++            op = pa_context_get_card_info_list(ctx, init_card_info, self);
++            if (op)
++                pa_operation_unref(op);
++        } else if (kind != PA_SUBSCRIPTION_EVENT_REMOVE && self->card_id == PA_INVALID_INDEX) {
++            op = pa_context_get_card_info_by_index(ctx, idx, init_card_info, self);
++            if (op)
++                pa_operation_unref(op);
+         } else if (idx == self->card_id && kind == PA_SUBSCRIPTION_EVENT_CHANGE) {
+             g_debug("card %u changed", idx);
++            find_endpoints(self);
+             op = pa_context_get_card_info_by_index(ctx, idx, update_voice_profile, self);
+             if (op)
+                 pa_operation_unref(op);
+-            if (self->sink_id != -1) {
++            if (self->sink_id != PA_INVALID_INDEX) {
+                 op = pa_context_get_sink_info_by_index(ctx, self->sink_id,
+                                                        change_sink_info, self);
+                 if (op)
+                     pa_operation_unref(op);
+             }
+-            if (self->source_id != -1) {
++            if (self->source_id != PA_INVALID_INDEX) {
+                 op = pa_context_get_source_info_by_index(ctx, self->source_id,
+                                                          change_source_info, self);
+                 if (op)
+@@ -767,13 +817,14 @@
+         g_idle_add(G_SOURCE_FUNC(pulseaudio_connect), self);
+         break;
+     case PA_CONTEXT_TERMINATED:
++        break;
+     case PA_CONTEXT_READY:
+         pa_context_set_subscribe_callback(ctx, changed_cb, self);
+         pa_context_subscribe(ctx,
+                              PA_SUBSCRIPTION_MASK_SINK  | PA_SUBSCRIPTION_MASK_SOURCE | PA_SUBSCRIPTION_MASK_CARD,
+                              NULL, self);
+         g_debug("PA is ready, initializing cards list");
+-        g_idle_add(init_pulseaudio_objects, self);
++        init_pulseaudio_objects(self);
+         break;
+     default:
+         g_return_if_reached();
+@@ -782,7 +833,9 @@
+ 
+ static void pulseaudio_cleanup(CadPulse *self)
+ {
++    forget_card(self);
+     if (self->ctx) {
++        pa_context_set_state_callback(self->ctx, NULL, NULL);
+         pa_context_disconnect(self->ctx);
+         pa_context_unref(self->ctx);
+         self->ctx = NULL;
+@@ -862,6 +915,7 @@
+ 
+ static void cad_pulse_init(CadPulse *self)
+ {
++    self->card_id = self->sink_id = self->source_id = PA_INVALID_INDEX;
+     self->manager = G_OBJECT(cad_manager_get_default());
+     self->audio_mode = CALL_AUDIO_MODE_UNKNOWN;
+     self->speaker_state = CALL_AUDIO_SPEAKER_UNKNOWN;
+@@ -896,9 +950,10 @@
+ 
+     if (operation) {
+         if (operation->op) {
+-            if (operation->op->type == CAD_OPERATION_ENABLE_SPEAKER &&
+-                operation->speaker_request != operation->pulse->speaker_request)
++            if (operation->request != operation->pulse->requests[operation->op->type])
+                 success = 0;
++            else if (operation->op->type == CAD_OPERATION_SELECT_MODE)
++                operation->pulse->selecting_mode = FALSE;
+             operation->op->success = (gboolean)!!success;
+             if (operation->op->callback)
+                 operation->op->callback(operation->op);
+@@ -949,16 +1004,13 @@
+     pa_operation *op = NULL;
+     const char *target_verb = NULL;
+ 
+-    if (eol != 0)
+-        return;
+-
+-    if (!info) {
+-        g_critical("PA returned no card info (eol=%d)", eol);
+-        return;
+-    }
+-
+-    if (info->index != operation->pulse->card_id)
+-        return;
++    if (eol > 0)
++        return;
++    if (eol < 0 || !info || info->index != operation->pulse->card_id ||
++        !info->active_profile2 || operation->request != operation->pulse->requests[CAD_OPERATION_SELECT_MODE]) {
++        operation_complete_cb(ctx, 0, operation);
++        return;
++    }
+ 
+     profile = info->active_profile2;
+ 
+@@ -996,10 +1048,11 @@
+     if (op) {
+         pa_operation_unref(op);
+     } else {
+-        g_debug("%s: nothing to be done", __func__);
+-        operation_complete_cb(ctx, 1, operation);
+-    }
+-}
++        operation_complete_cb(ctx, target_verb == NULL, operation);
++    }
++}
++
++static gboolean issue_endpoint_operation(gpointer data);
+ 
+ static void set_speaker_profile(pa_context *ctx, const pa_card_info *card, int eol, void *data)
+ {
+@@ -1011,8 +1064,27 @@
+     if (eol > 0)
+         return;
+     if (eol < 0 || !card || card->index != operation->pulse->card_id ||
+-        operation->speaker_request != operation->pulse->speaker_request ||
+-        !is_voice_profile(card->active_profile2))
++        operation->request != operation->pulse->requests[CAD_OPERATION_ENABLE_SPEAKER])
++        goto done;
++
++    if (!operation->profile_checked) {
++        CallAudioSpeakerState state = CALL_AUDIO_SPEAKER_UNKNOWN;
++        operation->profile_checked = TRUE;
++        if (is_voice_profile(card->active_profile2))
++            state = voice_profile_speaker(card, card->active_profile2);
++        if (state == CALL_AUDIO_SPEAKER_UNKNOWN) {
++            /* Several outputs in the active profile: use the live sink port. */
++            issue_endpoint_operation(operation);
++            return;
++        }
++        if (state == (operation->value ? CALL_AUDIO_SPEAKER_ON : CALL_AUDIO_SPEAKER_OFF)) {
++            operation_complete_cb(ctx, 1, operation);
++            return;
++        }
++        /* The requested output belongs to a different profile. Its port may
++         * still be visible on a node left over from the previous profile. */
++    }
++    if (!is_voice_profile(card->active_profile2))
+         goto done;
+ 
+     for (guint i = 0; i < card->n_profiles; i++) {
+@@ -1036,6 +1108,20 @@
+         operation_complete_cb(ctx, 0, operation);
+ }
+ 
++static void wait_for_endpoint(CadPulseOperation *operation)
++{
++    CadPulse *self = operation->pulse;
++
++    if (operation->request == self->requests[operation->op->type] &&
++        g_get_monotonic_time() < operation->deadline) {
++        if (self->ctx && pa_context_get_state(self->ctx) == PA_CONTEXT_READY)
++            find_endpoints(self);
++        g_timeout_add(40, issue_endpoint_operation, operation);
++    } else {
++        operation_complete_cb(self->ctx, 0, operation);
++    }
++}
++
+ static void set_output_port(pa_context *ctx, const pa_sink_info *info, int eol, void *data)
+ {
+     CadPulseOperation *operation = data;
+@@ -1044,9 +1130,15 @@
+ 
+     if (eol > 0)
+         return;
++    if (operation->request != operation->pulse->requests[operation->op->type])
++        goto done;
+     if (eol < 0 || !info || info->card != operation->pulse->card_id ||
+-        info->index != operation->pulse->sink_id)
+-        goto done;
++        info->index != operation->pulse->sink_id) {
++        if (operation->pulse->sink_id == operation->endpoint_id)
++            forget_sink(operation->pulse);
++        wait_for_endpoint(operation);
++        return;
++    }
+ 
+     if (operation->op->type == CAD_OPERATION_SELECT_MODE) {
+         target_port = get_available_sink_port(info, operation->value == CALL_AUDIO_MODE_CALL
+@@ -1054,8 +1146,6 @@
+     } else {
+         const pa_sink_port_info *best = NULL;
+ 
+-        if (operation->speaker_request != operation->pulse->speaker_request)
+-            goto done;
+         for (guint i = 0; i < info->n_ports; i++) {
+             const pa_sink_port_info *port = info->ports[i];
+             if (port->available == PA_PORT_AVAILABLE_NO ||
+@@ -1089,186 +1179,145 @@
+         operation_complete_cb(ctx, 0, operation);
+ }
+ 
+-/**
+- * cad_pulse_select_mode:
+- * @mode:
+- * @cad_op:
+- *
+- */
++static void set_mic_on_source(pa_context *ctx, const pa_source_info *info, int eol, void *data)
++{
++    CadPulseOperation *operation = data;
++    CadPulse *self;
++    pa_operation *op;
++
++    if (eol > 0)
++        return;
++    self = operation->pulse;
++    if (operation->request != self->requests[CAD_OPERATION_MUTE_MIC]) {
++        operation_complete_cb(ctx, 0, operation);
++        return;
++    }
++    if (eol < 0 || !info || info->card != self->card_id ||
++        info->index != self->source_id || info->monitor_of_sink != PA_INVALID_INDEX) {
++        if (self->source_id == operation->endpoint_id)
++            forget_source(self);
++        wait_for_endpoint(operation);
++        return;
++    }
++    if (!!info->mute == !!operation->value) {
++        operation_complete_cb(ctx, 1, operation);
++        return;
++    }
++    op = pa_context_set_source_mute_by_index(ctx, info->index, operation->value,
++                                             operation_complete_cb, operation);
++    if (op)
++        pa_operation_unref(op);
++    else
++        operation_complete_cb(ctx, 0, operation);
++}
++
++static gboolean issue_endpoint_operation(gpointer data)
++{
++    CadPulseOperation *operation = data;
++    CadPulse *self = operation->pulse;
++    CadOperationType type = operation->op->type;
++    pa_operation *op;
++
++    if (operation->request != self->requests[type]) {
++        operation_complete_cb(self->ctx, 0, operation);
++        return G_SOURCE_REMOVE;
++    }
++    if (!self->ctx || pa_context_get_state(self->ctx) != PA_CONTEXT_READY ||
++        self->card_id == PA_INVALID_INDEX) {
++        wait_for_endpoint(operation);
++        return G_SOURCE_REMOVE;
++    }
++    if (type == CAD_OPERATION_SELECT_MODE && self->has_voice_profile) {
++        op = pa_context_get_card_info_by_index(self->ctx, self->card_id,
++                                               set_card_profile, operation);
++        if (op)
++            pa_operation_unref(op);
++        else
++            operation_complete_cb(self->ctx, 0, operation);
++        return G_SOURCE_REMOVE;
++    }
++    if (self->selecting_mode && operation->op->callback && type != CAD_OPERATION_SELECT_MODE) {
++        wait_for_endpoint(operation);
++        return G_SOURCE_REMOVE;
++    }
++    if (type == CAD_OPERATION_ENABLE_SPEAKER && operation->op->callback &&
++        self->has_voice_profile && !operation->profile_checked) {
++        op = pa_context_get_card_info_by_index(self->ctx, self->card_id,
++                                               set_speaker_profile, operation);
++        if (op)
++            pa_operation_unref(op);
++        else
++            operation_complete_cb(self->ctx, 0, operation);
++        return G_SOURCE_REMOVE;
++    }
++    operation->endpoint_id = type == CAD_OPERATION_MUTE_MIC ? self->source_id : self->sink_id;
++    if (operation->endpoint_id == PA_INVALID_INDEX) {
++        wait_for_endpoint(operation);
++        return G_SOURCE_REMOVE;
++    }
++
++    if (type == CAD_OPERATION_MUTE_MIC)
++        op = pa_context_get_source_info_by_index(self->ctx, operation->endpoint_id,
++                                                 set_mic_on_source, operation);
++    else
++        op = pa_context_get_sink_info_by_index(self->ctx, operation->endpoint_id,
++                                               set_output_port, operation);
++    if (op)
++        pa_operation_unref(op);
++    else
++        operation_complete_cb(self->ctx, 0, operation);
++
++    return G_SOURCE_REMOVE;
++}
++
++static CadPulseOperation *new_operation(CadOperation *cad_op, guint value)
++{
++    CadPulse *self = cad_pulse_get_default();
++    CadPulseOperation *operation = g_new0(CadPulseOperation, 1);
++
++    operation->pulse = self;
++    operation->op = cad_op;
++    operation->value = value;
++    operation->request = ++self->requests[cad_op->type];
++    /* D-Bus activation and UCM profile switches can precede node publication. */
++    operation->deadline = g_get_monotonic_time() + 3 * G_TIME_SPAN_SECOND;
++    return operation;
++}
++
+ void cad_pulse_select_mode(CallAudioMode mode, CadOperation *cad_op)
+ {
+-    CadPulseOperation *operation = g_new(CadPulseOperation, 1);
+-    pa_operation *op = NULL;
+-
+-    if (!cad_op) {
+-        g_critical("%s: no callaudiod operation", __func__);
+-        goto error;
+-    }
+-
+-    /*
+-     * Make sure cad_op is of the correct type!
+-     */
+-    g_assert(cad_op->type == CAD_OPERATION_SELECT_MODE);
+-
+-    operation->pulse = cad_pulse_get_default();
+-    operation->op = cad_op;
+-    operation->value = mode;
+-
++    CadPulseOperation *operation;
++    CadPulse *self;
++
++    g_return_if_fail(cad_op && cad_op->type == CAD_OPERATION_SELECT_MODE);
++    operation = new_operation(cad_op, mode);
++    self = operation->pulse;
++    self->selecting_mode = TRUE;
+     if (mode != CALL_AUDIO_MODE_CALL) {
+-        /*
+-         * When ending a call, we want to make sure the mic doesn't stay muted
+-         */
+         CadOperation *unmute_op = g_new0(CadOperation, 1);
+         unmute_op->type = CAD_OPERATION_MUTE_MIC;
+-
+         cad_pulse_mute_mic(FALSE, unmute_op);
+ 
+-        /*
+-         * If the card has a dedicated voice profile, disable speaker so it
+-         * doesn't get automatically enabled for next call.
+-         */
+-        if (operation->pulse->has_voice_profile) {
++        if (self->has_voice_profile) {
+             CadOperation *disable_speaker_op = g_new0(CadOperation, 1);
+             disable_speaker_op->type = CAD_OPERATION_ENABLE_SPEAKER;
+-
+             cad_pulse_enable_speaker(FALSE, disable_speaker_op);
+         }
+     }
+ 
+-    if (operation->pulse->has_voice_profile) {
+-      /*
+-       * The pinephone f.e. has a voice profile
+-       */
+-        g_debug("card has voice profile, using it");
+-        op = pa_context_get_card_info_by_index(operation->pulse->ctx,
+-                                               operation->pulse->card_id,
+-                                               set_card_profile, operation);
+-    } else {
+-        if (operation->pulse->sink_id < 0) {
+-            g_warning("card has no voice profile and no usable sink");
+-            goto error;
+-        }
+-        g_debug("card doesn't have voice profile, switching output port");
+-
+-        op = pa_context_get_sink_info_by_index(operation->pulse->ctx,
+-                                               operation->pulse->sink_id,
+-                                               set_output_port, operation);
+-    }
+-
+-    if (op)
+-        pa_operation_unref(op);
+-
+-    return;
+-
+-error:
+-    if (cad_op) {
+-        cad_op->success = FALSE;
+-        if (cad_op->callback)
+-            cad_op->callback(cad_op);
+-    }
+-    if (operation)
+-        free(operation);
++    issue_endpoint_operation(operation);
+ }
+ 
+ void cad_pulse_enable_speaker(gboolean enable, CadOperation *cad_op)
+ {
+-    CadPulseOperation *operation = g_new(CadPulseOperation, 1);
+-    pa_operation *op = NULL;
+-
+-    if (!cad_op) {
+-        g_critical("%s: no callaudiod operation", __func__);
+-        goto error;
+-    }
+-
+-    /*
+-     * Make sure cad_op is of the correct type!
+-     */
+-    g_assert(cad_op->type == CAD_OPERATION_ENABLE_SPEAKER);
+-
+-    operation->pulse = cad_pulse_get_default();
+-
+-    if (operation->pulse->sink_id < 0) {
+-        g_warning("card has no usable sink");
+-        goto error;
+-    }
+-
+-    operation->op = cad_op;
+-    operation->value = (guint)enable;
+-    operation->speaker_request = ++operation->pulse->speaker_request;
+-
+-    op = pa_context_get_sink_info_by_index(operation->pulse->ctx,
+-                                           operation->pulse->sink_id,
+-                                           set_output_port, operation);
+-    if (op) {
+-        pa_operation_unref(op);
+-        return;
+-    }
+-
+-error:
+-    if (cad_op) {
+-        cad_op->success = FALSE;
+-        if (cad_op->callback)
+-            cad_op->callback(cad_op);
+-        g_free(cad_op);
+-    }
+-    if (operation)
+-        free(operation);
++    g_return_if_fail(cad_op && cad_op->type == CAD_OPERATION_ENABLE_SPEAKER);
++    issue_endpoint_operation(new_operation(cad_op, enable));
+ }
+ 
+ void cad_pulse_mute_mic(gboolean mute, CadOperation *cad_op)
+ {
+-    CadPulseOperation *operation = g_new(CadPulseOperation, 1);
+-    pa_operation *op = NULL;
+-
+-    if (!cad_op) {
+-        g_critical("%s: no callaudiod operation", __func__);
+-        goto error;
+-    }
+-
+-    /*
+-     * Make sure cad_op is of the correct type!
+-     */
+-    g_assert(cad_op->type == CAD_OPERATION_MUTE_MIC);
+-
+-    operation->pulse = cad_pulse_get_default();
+-
+-    if (operation->pulse->source_id < 0) {
+-        g_warning("card has no usable source");
+-        goto error;
+-    }
+-
+-    operation->op = cad_op;
+-    operation->value = (guint)mute;
+-
+-    if (operation->pulse->mic_state == CALL_AUDIO_MIC_OFF && !operation->value) {
+-        g_debug("mic is muted, unmuting...");
+-        op = pa_context_set_source_mute_by_index(operation->pulse->ctx,
+-                                                 operation->pulse->source_id, 0,
+-                                                 operation_complete_cb, operation);
+-    } else if (operation->pulse->mic_state == CALL_AUDIO_MIC_ON && operation->value) {
+-        g_debug("mic is active, muting...");
+-        op = pa_context_set_source_mute_by_index(operation->pulse->ctx,
+-                                                 operation->pulse->source_id, 1,
+-                                                 operation_complete_cb, operation);
+-    }
+-
+-    if (op) {
+-        pa_operation_unref(op);
+-    } else {
+-        g_debug("%s: nothing to be done", __func__);
+-        operation_complete_cb(operation->pulse->ctx, 1, operation);
+-    }
+-
+-    return;
+-
+-error:
+-    if (cad_op) {
+-        cad_op->success = FALSE;
+-        if (cad_op->callback)
+-            cad_op->callback(cad_op);
+-    }
+-    if (operation)
+-        free(operation);
++    g_return_if_fail(cad_op && cad_op->type == CAD_OPERATION_MUTE_MIC);
++    issue_endpoint_operation(new_operation(cad_op, mute));
+ }
+ 
+ CallAudioMode cad_pulse_get_audio_mode(void)

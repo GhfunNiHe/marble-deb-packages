@@ -1,0 +1,160 @@
+callaudiod (0.1.99-1+marble3) unstable; urgency=medium
+
+  * Route immediate speaker requests using the active voice profile while
+    its new PulseAudio sink is being published.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 12:03:00 +0800
+
+callaudiod (0.1.99-1+marble2) unstable; urgency=medium
+
+  * Rediscover the phone card, speaker and microphone after hotplug or a
+    profile switch. Wait for routing devices when a D-Bus request starts
+    the daemon and complete requests if PulseAudio reports an error.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 12:02:00 +0800
+
+callaudiod (0.1.99-1+marble1) unstable; urgency=medium
+
+  * Switch between compatible Voice Call profiles when the current sink
+    lacks the requested speaker or earpiece. Keep the capture route and
+    restore the earpiece for the next call.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 11:24:00 +0800
+
+callaudiod (0.1.99-1) unstable; urgency=medium
+
+  * New upstream release
+  * d/control: refresh dependencies.
+    Upstream now relies on `appstream` for version checking purposes, so
+    we must have it as a build dependency. `pkg-config` has been replaced
+    with `pkgconf` in Debian, so depend on the latter. Finally, our main
+    use-case is using PipeWire, so reorder the binary dependencies so we
+    prefer PipeWire over Pulseaudio and ensure we only use this version
+    with a recent enough WirePlumber.
+    While at it, bump Standards-Version as no other change is needed, and
+    drop the deprecated `Rules-Requires-Root: no`.
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Tue, 30 Sep 2025 10:08:45 +0200
+
+callaudiod (0.1.10-1) unstable; urgency=medium
+
+  * New upstream release
+  * d/watch: adapt to recent GitLab changes
+  * d/gbp.conf: add default commit messages
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Tue, 02 Jul 2024 12:31:59 +0200
+
+callaudiod (0.1.9-1) unstable; urgency=medium
+
+  * Release to unstable
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Tue, 13 Jun 2023 16:31:49 +0200
+
+callaudiod (0.1.9-1~exp1) experimental; urgency=medium
+
+  * New upstream version 0.1.9
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Tue, 16 May 2023 09:18:07 +0200
+
+callaudiod (0.1.8-1~exp1) experimental; urgency=medium
+
+  * New upstream version 0.1.8
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Mon, 15 May 2023 22:49:02 +0200
+
+callaudiod (0.1.7-1) unstable; urgency=medium
+
+  * New upstream version 0.1.6
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Tue, 10 Jan 2023 17:16:59 +0100
+
+callaudiod (0.1.6-1) unstable; urgency=medium
+
+  * New upstream version 0.1.6
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Sat, 10 Dec 2022 18:46:08 +0100
+
+callaudiod (0.1.5-1) unstable; urgency=medium
+
+  [ Arnaud Ferraris ]
+  * New upstream version 0.1.5
+  * d/control: update my email and bump Standards-Version
+
+  [ Debian Janitor ]
+  * Apply multi-arch hints. + libcallaudio-doc: Add Multi-Arch: foreign.
+    Changes-By: apply-multiarch-hints
+
+ -- Arnaud Ferraris <aferraris@debian.org>  Wed, 07 Dec 2022 12:58:02 +0100
+
+callaudiod (0.1.4-2) unstable; urgency=medium
+
+  * Team upload.
+  [ Guido Günther ]
+  * d/control: Allow for pipewire-pulse as well.
+    This allows to use pipewire-pulse in favour of pulseaudio.
+
+  [ Evangelos Ribeiro Tzaras ]
+  * Do not build documentation in an arch-only build.
+    Closes: bug#1010225 (thanks Helmut Grohne!)
+  * libcallaudio-0-1: Recommend callaudiod
+
+ -- Evangelos Ribeiro Tzaras <devrtz-debian@fortysixandtwo.eu>  Sun, 14 Aug 2022 16:30:17 +0200
+
+callaudiod (0.1.4-1) unstable; urgency=medium
+
+  * d/gbp.conf: use proper config for upstream tag.
+  * debian: update symbols file.
+  * New upstream version 0.1.4
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Fri, 25 Mar 2022 10:23:38 +0100
+
+callaudiod (0.1.3-1) unstable; urgency=medium
+
+  * New upstream version 0.1.3
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Thu, 06 Jan 2022 20:28:17 +0100
+
+callaudiod (0.1.2-1) unstable; urgency=medium
+
+  * New upstream version 0.1.2
+  * d/control: bump Standards-Version, no changes required
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Wed, 05 Jan 2022 11:31:55 +0100
+
+callaudiod (0.1.1-1) unstable; urgency=medium
+
+  * New upstream version 0.1.1
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Thu, 16 Sep 2021 12:01:25 +0200
+
+callaudiod (0.1.0-1) unstable; urgency=medium
+
+  [ Evangelos Ribeiro Tzaras ]
+  * d/control: Make doc package Architecture All
+  * d/control: put -doc package in doc section
+  * d/control: Fix doc package dependencies
+  * d/control: Suggest devhelp in doc package
+  * d/control: Fix doc package description
+
+  [ Arnaud Ferraris ]
+  * New upstream version 0.1.0
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Thu, 28 Jan 2021 08:55:46 +0100
+
+callaudiod (0.0.5-1) unstable; urgency=medium
+
+  [ Guido Günther ]
+  * d/gbp.conf: Set upstream branch.
+
+  [ Arnaud Ferraris ]
+  * New upstream version 0.0.5
+  * debian: propagate API version bump
+  * debian: create and build documentation package
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Tue, 12 Jan 2021 18:01:35 +0100
+
+callaudiod (0.0.4-1) unstable; urgency=medium
+
+  * Initial Debian release (Closes: #973841)
+
+ -- Arnaud Ferraris <arnaud.ferraris@gmail.com>  Thu, 05 Nov 2020 22:12:48 +0100

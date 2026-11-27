@@ -1,0 +1,351 @@
+Description: Route call speaker requests via compatible UCM profiles
+ When the current sink lacks the requested port, switch between Voice Call
+ profiles on the same card while retaining all capture ports. Observe
+ profile changes from the audio server and preserve working in-sink routes.
+Forwarded: no
+
+--- a/src/cad-pulse.c
++++ b/src/cad-pulse.c
+@@ -44,6 +44,7 @@
+     int source_id;
+ 
+     gboolean has_voice_profile;
++    guint speaker_request;
+     gchar *speaker_port;
+     gchar *earpiece_port;
+ 
+@@ -61,6 +62,7 @@
+     CadPulse *pulse;
+     CadOperation *op;
+     guint value;
++    guint speaker_request;
+ } CadPulseOperation;
+ 
+ static void pulseaudio_cleanup(CadPulse *self);
+@@ -383,7 +385,7 @@
+ 
+         switch (self->audio_mode) {
+         case CALL_AUDIO_MODE_CALL:
+-            if (g_strcmp0(info->active_port->name, self->speaker_port) == 0) {
++            if (info->active_port && info->active_port->type == PA_DEVICE_PORT_TYPE_SPEAKER) {
+                 self->speaker_state = CALL_AUDIO_SPEAKER_ON;
+                 g_object_set(self->manager, "speaker-state", self->speaker_state, NULL);
+                 /*
+@@ -406,7 +408,7 @@
+              * Note: this code path is only used when the card doesn't have a
+              * voice profile, otherwise things are easier to deal with.
+              */
+-            if (g_strcmp0(info->active_port->name, self->earpiece_port) == 0) {
++            if (info->active_port && g_strcmp0(info->active_port->name, self->earpiece_port) == 0) {
+                 self->audio_mode = CALL_AUDIO_MODE_CALL;
+                 g_object_set(self->manager, "audio-mode", self->audio_mode, NULL);
+                 /*
+@@ -444,6 +446,95 @@
+  * sound card
+  ******************************************************************************/
+ 
++static gboolean is_voice_profile(const pa_card_profile_info2 *profile)
++{
++    return profile && (g_str_equal(profile->name, SND_USE_CASE_VERB_VOICECALL) ||
++                       g_str_has_prefix(profile->name, SND_USE_CASE_VERB_VOICECALL " ("));
++}
++
++static gboolean port_has_profile(const pa_card_port_info *port,
++                                 const pa_card_profile_info2 *profile)
++{
++    for (guint i = 0; port->profiles2 && i < port->n_profiles; i++)
++        if (g_str_equal(port->profiles2[i]->name, profile->name))
++            return TRUE;
++
++    return FALSE;
++}
++
++/* Only infer a route when every available output in this profile agrees. */
++static CallAudioSpeakerState voice_profile_speaker(const pa_card_info *card,
++                                                   const pa_card_profile_info2 *profile)
++{
++    CallAudioSpeakerState state = CALL_AUDIO_SPEAKER_UNKNOWN;
++
++    for (guint i = 0; i < card->n_ports; i++) {
++        const pa_card_port_info *port = card->ports[i];
++        CallAudioSpeakerState next;
++
++        if (port->direction != PA_DIRECTION_OUTPUT || port->available == PA_PORT_AVAILABLE_NO ||
++            !port_has_profile(port, profile))
++            continue;
++        switch (port->type) {
++        case PA_DEVICE_PORT_TYPE_SPEAKER:
++            next = CALL_AUDIO_SPEAKER_ON;
++            break;
++        case PA_DEVICE_PORT_TYPE_EARPIECE:
++        case PA_DEVICE_PORT_TYPE_HANDSET:
++        case PA_DEVICE_PORT_TYPE_HEADPHONES:
++        case PA_DEVICE_PORT_TYPE_HEADSET:
++            next = CALL_AUDIO_SPEAKER_OFF;
++            break;
++        default:
++            return CALL_AUDIO_SPEAKER_UNKNOWN;
++        }
++        if (state != CALL_AUDIO_SPEAKER_UNKNOWN && state != next)
++            return CALL_AUDIO_SPEAKER_UNKNOWN;
++        state = next;
++    }
++    return state;
++}
++
++static gboolean has_same_inputs(const pa_card_info *card,
++                                const pa_card_profile_info2 *a,
++                                const pa_card_profile_info2 *b)
++{
++    if (a->n_sources != b->n_sources)
++        return FALSE;
++    for (guint i = 0; i < card->n_ports; i++) {
++        const pa_card_port_info *port = card->ports[i];
++        if (port->direction == PA_DIRECTION_INPUT &&
++            port_has_profile(port, a) != port_has_profile(port, b))
++            return FALSE;
++    }
++    return TRUE;
++}
++
++static void update_voice_profile(pa_context *ctx, const pa_card_info *card, int eol, void *data)
++{
++    CadPulse *self = data;
++    CallAudioMode mode;
++    CallAudioSpeakerState speaker;
++
++    if (eol || !card || card->index != self->card_id || !self->has_voice_profile)
++        return;
++
++    mode = is_voice_profile(card->active_profile2) ? CALL_AUDIO_MODE_CALL : CALL_AUDIO_MODE_DEFAULT;
++    speaker = CALL_AUDIO_SPEAKER_UNKNOWN;
++    if (mode == CALL_AUDIO_MODE_CALL)
++        speaker = voice_profile_speaker(card, card->active_profile2);
++    else if (self->audio_mode == CALL_AUDIO_MODE_CALL)
++        speaker = CALL_AUDIO_SPEAKER_OFF;
++    if (mode != self->audio_mode) {
++        self->audio_mode = mode;
++        g_object_set(self->manager, "audio-mode", mode, NULL);
++    }
++    if (speaker != CALL_AUDIO_SPEAKER_UNKNOWN && speaker != self->speaker_state) {
++        self->speaker_state = speaker;
++        g_object_set(self->manager, "speaker-state", speaker, NULL);
++    }
++}
++
+ static void init_card_info(pa_context *ctx, const pa_card_info *info, int eol, void *data)
+ {
+     CadPulse *self = data;
+@@ -502,22 +593,14 @@
+ 
+     g_debug("CARD: idx=%u name='%s'", info->index, info->name);
+ 
++    self->has_voice_profile = FALSE;
+     for (i = 0; i < info->n_profiles; i++) {
+-        pa_card_profile_info2 *profile = info->profiles2[i];
+-
+-        if (g_str_has_prefix(profile->name, SND_USE_CASE_VERB_VOICECALL)) {
++        if (is_voice_profile(info->profiles2[i])) {
+             self->has_voice_profile = TRUE;
+-            if (info->active_profile2 == profile)
+-                self->audio_mode = CALL_AUDIO_MODE_CALL;
+-            else
+-                self->audio_mode = CALL_AUDIO_MODE_DEFAULT;
+             break;
+         }
+     }
+-
+-    // We were able determine the current mode, set the corresponding D-Bus property
+-    if (self->audio_mode != CALL_AUDIO_MODE_UNKNOWN)
+-        g_object_set(self->manager, "audio-mode", self->audio_mode, NULL);
++    update_voice_profile(ctx, info, 0, self);
+ 
+     g_debug("CARD:   %s voice profile", self->has_voice_profile ? "has" : "doesn't have");
+ 
+@@ -643,6 +726,9 @@
+             g_idle_add(init_pulseaudio_objects, self);
+         } else if (idx == self->card_id && kind == PA_SUBSCRIPTION_EVENT_CHANGE) {
+             g_debug("card %u changed", idx);
++            op = pa_context_get_card_info_by_index(ctx, idx, update_voice_profile, self);
++            if (op)
++                pa_operation_unref(op);
+             if (self->sink_id != -1) {
+                 op = pa_context_get_sink_info_by_index(ctx, self->sink_id,
+                                                        change_sink_info, self);
+@@ -810,6 +896,9 @@
+ 
+     if (operation) {
+         if (operation->op) {
++            if (operation->op->type == CAD_OPERATION_ENABLE_SPEAKER &&
++                operation->speaker_request != operation->pulse->speaker_request)
++                success = 0;
+             operation->op->success = (gboolean)!!success;
+             if (operation->op->callback)
+                 operation->op->callback(operation->op);
+@@ -912,63 +1001,92 @@
+     }
+ }
+ 
++static void set_speaker_profile(pa_context *ctx, const pa_card_info *card, int eol, void *data)
++{
++    CadPulseOperation *operation = data;
++    const pa_card_profile_info2 *best = NULL;
++    pa_operation *op = NULL;
++
++    /* By-index introspection also sends an end marker after the data callback. */
++    if (eol > 0)
++        return;
++    if (eol < 0 || !card || card->index != operation->pulse->card_id ||
++        operation->speaker_request != operation->pulse->speaker_request ||
++        !is_voice_profile(card->active_profile2))
++        goto done;
++
++    for (guint i = 0; i < card->n_profiles; i++) {
++        const pa_card_profile_info2 *profile = card->profiles2[i];
++        if (!profile->available || !is_voice_profile(profile) ||
++            profile == card->active_profile2 ||
++            voice_profile_speaker(card, profile) != (operation->value ? CALL_AUDIO_SPEAKER_ON
++                                                                      : CALL_AUDIO_SPEAKER_OFF) ||
++            !has_same_inputs(card, card->active_profile2, profile))
++            continue;
++        if (!best || profile->priority > best->priority)
++            best = profile;
++    }
++    if (best)
++        op = pa_context_set_card_profile_by_index(ctx, card->index, best->name,
++                                                  operation_complete_cb, operation);
++done:
++    if (op)
++        pa_operation_unref(op);
++    else
++        operation_complete_cb(ctx, 0, operation);
++}
++
+ static void set_output_port(pa_context *ctx, const pa_sink_info *info, int eol, void *data)
+ {
+     CadPulseOperation *operation = data;
+     pa_operation *op = NULL;
+-    const gchar *target_port;
+-
+-    if (eol != 0)
+-        return;
+-
+-    if (!info) {
+-        g_critical("PA returned no sink info (eol=%d)", eol);
+-        return;
+-    }
+-
+-    if (info->card != operation->pulse->card_id || info->index != operation->pulse->sink_id)
+-        return;
+-
+-    if (operation->op && operation->op->type == CAD_OPERATION_SELECT_MODE) {
+-        /*
+-         * When switching to voice call mode, we want to switch to any port
+-         * other than the speaker; this makes sure we use the headphones if they
+-         * are connected, and the earpiece otherwise.
+-         * When switching back to normal mode, the highest priority port is to
+-         * be selected anyway.
+-         */
+-        if (operation->value == CALL_AUDIO_MODE_CALL)
+-            target_port = get_available_sink_port(info, operation->pulse->speaker_port);
+-        else
+-            target_port = get_available_sink_port(info, NULL);
++    const gchar *target_port = NULL;
++
++    if (eol > 0)
++        return;
++    if (eol < 0 || !info || info->card != operation->pulse->card_id ||
++        info->index != operation->pulse->sink_id)
++        goto done;
++
++    if (operation->op->type == CAD_OPERATION_SELECT_MODE) {
++        target_port = get_available_sink_port(info, operation->value == CALL_AUDIO_MODE_CALL
++                                                    ? operation->pulse->speaker_port : NULL);
+     } else {
+-        /*
+-         * When forcing speaker output, we simply select the speaker port.
+-         * When disabling speaker output, we want the highest priority port
+-         * other than the speaker, so that we use the headphones if connected,
+-         * and the earpiece otherwise.
+-         */
+-        if (operation->value)
+-            target_port = operation->pulse->speaker_port;
+-        else
+-            target_port = get_available_sink_port(info, operation->pulse->speaker_port);
+-    }
+-
+-    g_debug("active port is '%s', target port is '%s'", info->active_port->name, target_port);
+-
+-    if (target_port && g_strcmp0(info->active_port->name, target_port) != 0) {
+-        g_debug("switching to target port '%s'", target_port);
+-        op = pa_context_set_sink_port_by_index(ctx, operation->pulse->sink_id,
+-                                               target_port,
++        const pa_sink_port_info *best = NULL;
++
++        if (operation->speaker_request != operation->pulse->speaker_request)
++            goto done;
++        for (guint i = 0; i < info->n_ports; i++) {
++            const pa_sink_port_info *port = info->ports[i];
++            if (port->available == PA_PORT_AVAILABLE_NO ||
++                (port->type == PA_DEVICE_PORT_TYPE_SPEAKER) != !!operation->value)
++                continue;
++            if (!best || port->priority > best->priority)
++                best = port;
++        }
++        if (best) {
++            target_port = best->name;
++        } else if (operation->op->callback && operation->pulse->has_voice_profile) {
++            /* Modern UCM may expose the other output as a sibling profile.
++             * The internal hangup reset must never race the switch to HiFi. */
++            op = pa_context_get_card_info_by_index(ctx, info->card, set_speaker_profile, operation);
++            goto done;
++        }
++    }
++    if (target_port) {
++        if (info->active_port && g_str_equal(info->active_port->name, target_port)) {
++            operation_complete_cb(ctx, 1, operation);
++            return;
++        }
++        op = pa_context_set_sink_port_by_index(ctx, info->index, target_port,
+                                                operation_complete_cb, operation);
+     }
+ 
+-    if (op) {
++done:
++    if (op)
+         pa_operation_unref(op);
+-    } else {
+-        g_debug("%s: nothing to be done", __func__);
+-        operation_complete_cb(ctx, 1, operation);
+-    }
++    else
++        operation_complete_cb(ctx, 0, operation);
+ }
+ 
+ /**
+@@ -1076,20 +1194,22 @@
+ 
+     operation->op = cad_op;
+     operation->value = (guint)enable;
++    operation->speaker_request = ++operation->pulse->speaker_request;
+ 
+     op = pa_context_get_sink_info_by_index(operation->pulse->ctx,
+                                            operation->pulse->sink_id,
+                                            set_output_port, operation);
+-    if (op)
++    if (op) {
+         pa_operation_unref(op);
+-
+-    return;
++        return;
++    }
+ 
+ error:
+     if (cad_op) {
+         cad_op->success = FALSE;
+         if (cad_op->callback)
+             cad_op->callback(cad_op);
++        g_free(cad_op);
+     }
+     if (operation)
+         free(operation);

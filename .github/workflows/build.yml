@@ -15,6 +15,7 @@ env:
   SRC_DEVSUPPORT_REF: ${{ inputs.devsupport_src_ref || 'main' }}
   SRC_MODEMMANAGER_REPO: ${{ inputs.modemmanager_src_repo || 'https://gitlab.freedesktop.org/mobile-broadband/ModemManager' }}
   SRC_MODEMMANAGER_REF: ${{ inputs.modemmanager_src_ref }}  # empty = modemmanager/COMMIT
+  SRC_CALLAUDIOD_POOL: https://deb.debian.org/debian/pool/main/c/callaudiod
   SRC_LIBSSC_REPO: ${{ inputs.libssc_src_repo || 'https://codeberg.org/DylanVanAssche/libssc' }}
   SRC_LIBSSC_REF: ${{ inputs.libssc_src_ref }}              # empty = v<changelog version>
   SRC_IIO_REPO: ${{ inputs.iio_src_repo || 'https://gitlab.freedesktop.org/hadess/iio-sensor-proxy' }}
@@ -39,6 +40,7 @@ on:
       - 'libqmi/**'
       - 'libmbim/**'
       - 'modemmanager/**'
+      - 'callaudiod/**'
       - 'iio-sensor-proxy-ssc/**'
       - 'hexagonrpc/**'
       - 'libva-v4l2/**'
@@ -159,6 +161,7 @@ jobs:
             libglib2.0-dev libprotobuf-c-dev libgstreamer-plugins-base1.0-dev \
             protobuf-compiler protobuf-c-compiler \
             libgudev-1.0-dev libpolkit-gobject-1-dev \
+            libappstream-dev libasound2-dev libpulse-dev \
             libmbim-glib-dev libqrtr-glib-dev libsystemd-dev libgirepository1.0-dev \
             gtk-doc-tools gi-docgen help2man valac xsltproc systemd-dev \
             bash-completion gettext libdbus-1-dev dbus polkitd \
@@ -320,6 +323,21 @@ jobs:
           cp "$RUNNER_TEMP/build"/modemmanager-marble_*.deb "$RUNNER_TEMP/build"/libmm-glib0_*.deb \
              "$RUNNER_TEMP/build"/libmm-glib-dev_*.deb "$RUNNER_TEMP/build"/gir1.2-modemmanager-*.deb \
              "$GITHUB_WORKSPACE/out/"
+
+      - name: "Build: callaudiod"
+        run: |
+          mkdir -p "$RUNNER_TEMP/build/callaudiod/src"
+          cd "$RUNNER_TEMP/build/callaudiod"
+          while read -r digest archive; do
+            wget -q -O "$archive" "$SRC_CALLAUDIOD_POOL/$archive"
+          done < "$GITHUB_WORKSPACE/callaudiod/SHA256SUMS"
+          sha256sum -c "$GITHUB_WORKSPACE/callaudiod/SHA256SUMS"
+          tar -xf callaudiod_*.orig.tar.bz2 -C src --strip-components=1
+          tar -xf callaudiod_*.debian.tar.xz -C src
+          cp -a "$GITHUB_WORKSPACE/callaudiod/debian/." src/debian/
+          cd src
+          dpkg-buildpackage -B -us -uc
+          cp ../callaudiod_*.deb "$GITHUB_WORKSPACE/out/"
 
       # libssc: overlay debian/ onto the upstream tag snapshot.
       - name: "Build: libssc"
