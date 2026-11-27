@@ -1,3 +1,11 @@
+marble-device-support (1.0.0-31) unstable; urgency=medium
+
+  * Add the OV64B40 rear wide camera to the on-demand V4L2 outputs
+    used by desktop camera applications. Rotate its output clockwise to
+    align its portrait view with the other cameras.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 17:16:00 +0800
+
 marble-device-support (1.0.0-30) unstable; urgency=medium
 
   * Install the cellular handset, speakerphone and microphone UCM routes.

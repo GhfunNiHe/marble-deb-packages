@@ -1,3 +1,10 @@
+linux-xiaomi-marble (7.2.8+marble3) unstable; urgency=medium
+
+  * Enable dianqk's OmniVision OV64B40 driver for the rear wide camera.
+    Its 2x2 binned mode outputs 4624x3472 RAW10 over three C-PHY trios.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 17:15:00 +0800
+
 linux-xiaomi-marble (7.2.8+marble2) unstable; urgency=medium
 
   * Restore the AW88263S amplifier profile's ultrasound setting on wake

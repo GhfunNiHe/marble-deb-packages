@@ -29,8 +29,9 @@ Depends: ${misc:Depends}, kmod, linux-base
 Recommends: firmware-xiaomi-marble
 Description: Linux kernel for Xiaomi Redmi Note 12 Turbo (marble)
  Mainline Linux 7.2.8 kernel with the marble (Poco F5 / Redmi Note 12 Turbo,
- SM7475), based on iLtanaka's device enablement and the camera port by
- LazyBonesLZY, including Shandorman's S5K3P9 driver.
+ SM7475), based on iLtanaka's device enablement. LazyBonesLZY ported the
+ front and macro cameras, including Shandorman's S5K3P9 driver. The OV64B40
+ main camera driver and board wiring come from dianqk.
  .
  Built with LLVM/ThinLTO and ccache. Ships the uncompressed kernel Image
  (as vmlinuz-<ver>), the device tree, and kernel modules including

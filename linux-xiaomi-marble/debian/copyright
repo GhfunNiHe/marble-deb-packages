@@ -6,6 +6,9 @@ Comment: Based on Tatsuki Tanaka's iLtanaka/linux-marble port. The GC02M1
  driver and marble front and macro camera integration come from LazyBonesLZY
  (https://github.com/LazyBonesLZY/linux-marble/tree/marble-7.2). Shandorman
  wrote the S5K3P9 driver that LazyBonesLZY adapted for marble.
+ The OV64B40 sensor driver, main camera wiring and CAMSS adaptations
+ are based on patches by dianqk <dianqk@dianqk.net> from
+ https://github.com/dianqk/nixos-android-devices/tree/17f4a785e2737d4635d2bf55369e519a635bde49/pkgs/linux-kernel
 
 Files: *
 Copyright: 2005-2026 The Linux kernel developers
