@@ -113,6 +113,10 @@ on:
         description: 'libva-v4l2 的 tag/分支/提交'
         type: string
         default: 'main'
+      upload_apt:
+        description: '上传构建产物到 apt 标签（取消勾选则不上传）'
+        type: boolean
+        default: true
 
 # Rebuilds supersede each other; never queue them up.
 concurrency:
@@ -426,17 +430,20 @@ jobs:
           path: ~/.ccache
           key: ccache-marble-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
 
-  # GitHub Release
+  # Rolling apt archive
   release:
-    name: Create GitHub Release
+    name: Publish to apt
     needs: build
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_apt }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    concurrency:
+      group: apt-release
+      cancel-in-progress: false
 
     steps:
-      - name: Get short commit SHA
-        run: echo "SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
+      - uses: actions/checkout@v4
 
       - name: Download DEBs
         uses: actions/download-artifact@v8
@@ -444,18 +451,15 @@ jobs:
           name: marble-debs
           path: debs
 
-      # dbgsym debs stay in the build artifact, never in the release.
+      # dbgsym debs stay in the build artifact, never in the archive.
       - name: Stage release DEBs (drop dbgsym)
         run: |
           rm -rf release-debs && mkdir -p release-debs
           find debs -name '*.deb' ! -name '*-dbgsym*.deb' -exec cp -t release-debs {} +
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: marble-deb-${{ env.SHORT_SHA }}
-          name: Marble Deb Packages (${{ env.SHORT_SHA }})
-          files: release-debs/**/*.deb
-          draft: false
+      - name: Publish to apt
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mapfile -t debs < <(find release-debs -name '*.deb' -type f | sort)
+          .github/scripts/publish-apt-release.sh "${debs[@]}"

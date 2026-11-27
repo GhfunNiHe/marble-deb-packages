@@ -12,9 +12,9 @@ on:
       - '.github/workflows/build-kernel.yml'
   workflow_dispatch:
     inputs:
-      # 默认勾选：上传正式 Release；取消勾选：上传 Pre-Release。
-      release:
-        description: '上传 Release（取消勾选则上传 Pre-Release）'
+      # 默认勾选：上传构建产物到 apt 标签；取消勾选：只构建不上传。
+      upload_apt:
+        description: '上传构建产物到 apt 标签（取消勾选则不上传）'
         type: boolean
         default: true
       # 默认使用 marble 项目的内核仓库及其设备分支。
@@ -141,17 +141,20 @@ jobs:
           path: ~/.ccache
           key: ccache-marble-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}
 
-  # Publish the kernel DEB: push builds publish a full release; manual runs publish a prerelease only when the input is unticked.
+  # Rolling apt archive
   release:
-    name: Create release
+    name: Publish to apt
     needs: build
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_apt }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    concurrency:
+      group: apt-release
+      cancel-in-progress: false
 
     steps:
-      - name: Get short commit SHA
-        run: echo "SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_ENV
+      - uses: actions/checkout@v4
 
       - name: Download artifacts
         uses: actions/download-artifact@v8
@@ -160,13 +163,9 @@ jobs:
           merge-multiple: true
           path: debs
 
-      - name: Publish release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: kernel-deb-${{ env.SHORT_SHA }}
-          name: Kernel linux-xiaomi-marble (${{ env.SHORT_SHA }})
-          files: debs/**/*.deb
-          prerelease: ${{ github.event_name == 'workflow_dispatch' && !inputs.release }}
-          draft: false
+      - name: Publish to apt
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mapfile -t debs < <(find debs -name '*.deb' -type f | sort)
+          .github/scripts/publish-apt-release.sh "${debs[@]}"
