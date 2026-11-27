@@ -1,6 +1,0 @@
-# ADSP reports ONLINE=0 on battery power. Device readiness follows ADSP
-# availability; only the verifier's activation depends on the gauge verdict.
-ACTION=="add|change", SUBSYSTEM=="power_supply", KERNEL=="qcom-battmgr-usb", ENV{POWER_SUPPLY_ONLINE}!="?*", TAG+="systemd", ENV{SYSTEMD_READY}="0"
-ACTION=="add|change", SUBSYSTEM=="power_supply", KERNEL=="qcom-battmgr-usb", ENV{POWER_SUPPLY_ONLINE}=="?*", TAG+="systemd", ENV{SYSTEMD_READY}="1"
-ACTION=="add|change", SUBSYSTEM=="power_supply", KERNEL=="qcom-battmgr-usb", ENV{POWER_SUPPLY_ONLINE}=="?*", ATTR{device/xiaomi/authentic}=="0", ENV{SYSTEMD_WANTS}+="xiaomi-mipps-fuel-gauge.service"
-ACTION=="add", SUBSYSTEM=="typec", KERNEL=="port0-partner", ATTR{[power_supply/qcom-battmgr-usb]device/xiaomi/authentic}=="0", TAG+="systemd", ENV{SYSTEMD_WANTS}+="xiaomi-mipps-fuel-gauge.service"
