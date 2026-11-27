@@ -1,3 +1,14 @@
+marble-device-support (1.0.0-30) unstable; urgency=medium
+
+  * Install the cellular handset, speakerphone and microphone UCM routes.
+    Restore the media paths after calls and expose the linked speaker
+    gain to the desktop on kernels that support it.
+  * Fetch and verify the voice DSP profile on the device when it connects
+    to the network. Preserve an existing profile.
+  * Drop the qbootctl drop-in that waited for the boot_a/boot_b symlinks.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 13:00:00 +0800
+
 marble-device-support (1.0.0-29) unstable; urgency=medium
 
   * Use ModemManager's quick suspend/resume mode to retain the integrated

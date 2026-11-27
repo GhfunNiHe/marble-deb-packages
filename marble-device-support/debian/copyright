@@ -9,6 +9,14 @@ License: MIT or GPL-2.0-or-later
  MIT, configuration and scripts are GPL-2.0-or-later or MIT. See the
  upstream repository for per-file headers.
 
+Files: alsa/ucm2/Qualcomm/sm8450/xiaomi-marble/VoiceCall.conf
+Copyright: 2026 Halhadus
+License: GPL-2.0-only
+ On Debian systems the full license text is in
+ /usr/share/common-licenses/GPL-2.
+Comment: Adapted from Halhadus/marble-call-audio, commit
+ 8016413cda4f8acf340754ce3d09251fa37e12da.
+
 Files: camera/marble-camera.c
        modprobe/marble-camera.conf
        wireplumber/50-marble-camera.conf
