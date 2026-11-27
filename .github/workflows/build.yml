@@ -23,7 +23,7 @@ env:
   SRC_HEXAGONRPC_REPO: ${{ inputs.hexagonrpc_src_repo || 'https://github.com/linux-msm/hexagonrpc' }}
   SRC_HEXAGONRPC_REF: ${{ inputs.hexagonrpc_src_ref || 'v0.4.0' }} # Sensor registry support
   SRC_LIBVA_REPO: ${{ inputs.libva_src_repo || 'https://github.com/FFT-infra/qualcomm-iris-vaapi' }}
-  SRC_LIBVA_REF: ${{ inputs.libva_src_ref || 'feat/encode-entrypoints' }}  # empty = feat/encode-entrypoints
+  SRC_LIBVA_REF: ${{ inputs.libva_src_ref || 'main' }}  # empty = main
 
 on:
   push:
@@ -85,6 +85,12 @@ on:
         description: 'ModemManager 的 tag/分支/提交（留空 = modemmanager/COMMIT）'
         type: string
         default: ''
+      networkmanager_src_dsc:
+        description: 'NetworkManager 的 Ubuntu 源码包 .dsc 链接（留空使用仓库指定版本）'
+        type: string
+      networkmanager_src_sha256:
+        description: '所选 .dsc 的 SHA-256（使用默认版本或其镜像时可留空）'
+        type: string
       libssc_src_repo:
         description: 'libssc 源码仓库地址 (repo URL)'
         type: string
@@ -116,7 +122,7 @@ on:
       libva_src_ref:
         description: 'libva-v4l2 的 tag/分支/提交'
         type: string
-        default: 'feat/encode-entrypoints'
+        default: 'main'
 
 # Rebuilds supersede each other; never queue them up.
 concurrency:
@@ -240,7 +246,7 @@ jobs:
             echo "SRC_LIBSSC_URL=$(src_url "$SRC_LIBSSC_REPO" "${SRC_LIBSSC_REF:-v$LSVER}")"
             echo "SRC_IIO_URL=$(src_url "$SRC_IIO_REPO" "${SRC_IIO_REF:-$IIOVER}")"
             echo "SRC_HEXAGONRPC_URL=$(src_url "$SRC_HEXAGONRPC_REPO" "${SRC_HEXAGONRPC_REF:-v0.4.0}")"
-            echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-feat/encode-entrypoints}")"
+            echo "SRC_LIBVA_URL=$(src_url "$SRC_LIBVA_REPO" "${SRC_LIBVA_REF:-main}")"
           } >> "$GITHUB_ENV"
 
           # A wrong parameter shows up as a 404 in the next step, so print what
@@ -313,6 +319,8 @@ jobs:
       - name: "Build: network-manager"
         env:
           DEB_BUILD_PROFILES: nocheck
+          NETWORKMANAGER_SRC_DSC: ${{ inputs.networkmanager_src_dsc }}
+          NETWORKMANAGER_SRC_SHA256: ${{ inputs.networkmanager_src_sha256 }}
         run: network-manager/build "$GITHUB_WORKSPACE/out"
 
       - name: "Build: callaudiod"

@@ -4,34 +4,59 @@ set -eu
 overlay=$(dirname "$(realpath "$0")")
 output=$(realpath -m "${1:-out}")
 cache=$(realpath -m "${RUNNER_TEMP:-$PWD}/build/network-manager")
-ubuntu_version=$(dpkg-parsechangelog -l "$overlay/debian/changelog" -S Version)
-ubuntu_version=${ubuntu_version%+marble*}
+package_version=$(dpkg-parsechangelog -l "$overlay/debian/changelog" -S Version)
+ubuntu_version=${package_version%+marble*}
 ubuntu=https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/network-manager/$ubuntu_version
 snapshot=https://snapshot.debian.org/archive/debian/20261119T000000Z/pool/main
 
 mkdir -p "$output" "$cache"
 cd "$cache"
+work=$(mktemp -d "$cache/build.XXXXXXXX")
+trap 'rm -rf "$work"' EXIT
+
+fetch() {
+    if ! printf '%s  %s\n' "$3" "$2" | sha256sum --check --status 2>/dev/null; then
+        /usr/lib/apt/apt-helper download-file "$1" "$2" "SHA256:$3"
+    fi
+}
+
 while read -r digest archive; do
     case "$archive" in
-        network-manager_*) pool=$ubuntu ;;
+        network-manager_*.dsc)
+            url=${NETWORKMANAGER_SRC_DSC:-$ubuntu/$archive}
+            srcdir=$cache
+            if [ -n "${NETWORKMANAGER_SRC_DSC:-}" ]; then
+                srcdir=$work
+            fi
+            dsc=$srcdir/${url##*/}
+            fetch "$url" "$dsc" "${NETWORKMANAGER_SRC_SHA256:-$digest}"
+            awk '/^Checksums-Sha256:/ { files=1; next } !/^ / { files=0 } files { print $1, $3 }' "$dsc" |
+            while read -r sha file; do
+                case "$file" in
+                    ""|.*|*/*) echo "Invalid source archive name: $file" >&2; exit 1 ;;
+                esac
+                fetch "${url%/*}/$file" "$srcdir/$file" "$sha"
+            done
+            continue ;;
         libndp_*) pool=$snapshot/libn/libndp ;;
         ppp-dev_*) pool=$snapshot/p/ppp ;;
     esac
-    if ! printf '%s  %s\n' "$digest" "$archive" | sha256sum --check --status 2>/dev/null; then
-        /usr/lib/apt/apt-helper download-file "$pool/$archive" "$archive" "SHA256:$digest"
-    fi
+    fetch "$pool/$archive" "$archive" "$digest"
 done < "$overlay/SHA256SUMS"
 
-work=$(mktemp -d "$cache/build.XXXXXXXX")
-trap 'rm -rf "$work"' EXIT
 cd "$work"
-dpkg-source -x "$cache/network-manager_${ubuntu_version}.dsc" src
+dpkg-source -x "$dsc" src
 cd src
+if [ "$(dpkg-parsechangelog -S Source)" != network-manager ]; then
+    echo "Expected a network-manager source package" >&2
+    exit 1
+fi
+source_version=$(dpkg-parsechangelog -S Version)
 patch -p1 < "$overlay/packaging-noble.patch"
 cp "$overlay"/debian/patches/*.patch debian/patches/
 cat "$overlay/debian/patches/series" >> debian/patches/series
 {
-    cat "$overlay/debian/changelog"
+    sed "1s/([^)]*)/(${source_version}+${package_version##*+})/" "$overlay/debian/changelog"
     printf '\n'
     cat debian/changelog
 } > debian/changelog.marble

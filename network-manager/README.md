@@ -17,8 +17,11 @@ apt-get install -y --no-install-recommends build-essential ca-certificates faker
 DEB_BUILD_OPTIONS=nocheck DEB_BUILD_PROFILES=nocheck network-manager/build out
 ```
 
-The build uses Ubuntu's NetworkManager source and packaging, plus the patches
-in this directory. It checks all downloaded inputs against `SHA256SUMS`.
+In **Run workflow**, leave the NetworkManager fields empty to build the pinned
+Ubuntu version. To build another Ubuntu source package, enter its `.dsc` URL
+and SHA-256. The files listed in the descriptor must be available alongside
+it, and the marble patches must apply to that version. The build checks the
+source archives against the descriptor and uses its source version in the DEBs.
 Noble builds libndp 1.9 from source for the IPv6-only cellular network
 translation code (464XLAT). The PPP plugins use the pppd headers for the ABI
 versions installed by the supported images.
