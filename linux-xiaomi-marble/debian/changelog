@@ -1,3 +1,10 @@
+linux-xiaomi-marble (7.2.8+marble4) UNRELEASED; urgency=medium
+
+  * Power the top microphone from MIC BIAS4 and give its ADC a separate
+    SoundWire master port for simultaneous capture with the bottom mic.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 18:13:00 +0800
+
 linux-xiaomi-marble (7.2.8+marble3) unstable; urgency=medium
 
   * Enable dianqk's OmniVision OV64B40 driver for the rear wide camera.

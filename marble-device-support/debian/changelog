@@ -1,3 +1,11 @@
+marble-device-support (1.0.0-32) UNRELEASED; urgency=medium
+
+  * Capture the top microphone on the left and the bottom on the right
+    with the matching marble device tree. Release the top microphone
+    when switching to calls or a headset.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 18:13:00 +0800
+
 marble-device-support (1.0.0-31) unstable; urgency=medium
 
   * Add the OV64B40 rear wide camera to the on-demand V4L2 outputs
