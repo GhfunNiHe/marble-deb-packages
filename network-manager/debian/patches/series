@@ -1,7 +1,4 @@
 Force-online-state-with-unmanaged-devices.patch
-Fix-test-suite-failure-with-glib-2.89.patch
-bpf-Detect-ELF-ABI-version-on-ppc64.patch
-bpf-clat-fix-sparc64-architecture-define-for-BPF-compilat.patch
 
 # Ubuntu patches
 Update-dnsmasq-parameters.patch

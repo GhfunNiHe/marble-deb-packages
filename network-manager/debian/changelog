@@ -2,6 +2,7 @@ network-manager (1.58.1-1+marble2) noble; urgency=medium
 
   * Raise the package revision above Debian forky's 1.58.1-1+b1 so upgrades
     keep the mobile data disconnect fix.
+  * Drop ppc64, sparc64 and GLib 2.89 fixes unused by the Noble arm64 build.
 
  -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 15:28:16 +0800
 
