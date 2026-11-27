@@ -1,0 +1,272 @@
+Description: Limit WWAN disconnect requests to the bearers activated by NetworkManager
+ Other modem clients can have independent data connections, including the
+ IMS bearer used for calls. Simple.Disconnect("/") tears those down as well.
+ Keep the bearer returned by Simple.Connect until disconnect consumes it.
+ .
+ If deactivation races Simple.Connect, wait for its reply and disconnect
+ the bearer it returns. Keep the bearer until ModemManager acknowledges
+ release, and serialize a new connection with this cleanup.
+Origin: vendor
+Forwarded: no
+Last-Update: 2026-11-27
+
+--- a/src/core/devices/wwan/nm-modem-broadband.c
++++ b/src/core/devices/wwan/nm-modem-broadband.c
+@@ -80,6 +80,8 @@
+ 
+     /* Connection setup */
+     ConnectContext *ctx;
++    GCancellable   *pending_connect;
++    GSList         *disconnect_requests;
+ 
+     MMBearer         *bearer;
+     MMBearerIpConfig *ipv4_config;
+@@ -361,28 +363,39 @@
+ 
+ static void connect_context_step(NMModemBroadband *self);
+ 
++static void disconnect_bearer(NMModemBroadband          *self,
++                              gboolean                   warn,
++                              GCancellable              *cancellable,
++                              _NMModemDisconnectCallback callback,
++                              gpointer                   user_data);
++
+ static void
+-connect_ready(MMModemSimple *simple_iface, GAsyncResult *res, NMModemBroadband *self)
++connect_ready(MMModemSimple *simple_iface, GAsyncResult *res, gpointer user_data)
+ {
+-    ConnectContext           *ctx;
+-    GError                   *error      = NULL;
+-    NMModemIPMethod           ip4_method = NM_MODEM_IP_METHOD_UNKNOWN;
+-    NMModemIPMethod           ip6_method = NM_MODEM_IP_METHOD_UNKNOWN;
+-    gs_unref_object MMBearer *bearer     = NULL;
++    gs_unref_object NMModemBroadband *self = user_data;
++    ConnectContext                   *ctx;
++    GError                           *error      = NULL;
++    NMModemIPMethod                   ip4_method = NM_MODEM_IP_METHOD_UNKNOWN;
++    NMModemIPMethod                   ip6_method = NM_MODEM_IP_METHOD_UNKNOWN;
++    gs_unref_object MMBearer         *bearer     = NULL;
+ 
+     bearer = mm_modem_simple_connect_finish(simple_iface, res, &error);
+ 
+-    if (g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
+-        g_error_free(error);
+-        return;
+-    }
+-
+     ctx = self->_priv.ctx;
++    nm_assert(!self->_priv.bearer);
++    self->_priv.bearer = g_steal_pointer(&bearer);
+ 
+-    if (!ctx)
++    if (g_cancellable_is_cancelled(self->_priv.pending_connect)) {
++        g_clear_object(&self->_priv.pending_connect);
++        g_clear_error(&error);
++        if (self->_priv.bearer)
++            disconnect_bearer(self, TRUE, NULL, NULL, NULL);
++        else if (ctx && ctx->step == CONNECT_STEP_CONNECT)
++            connect_context_step(self);
+         return;
+-
+-    self->_priv.bearer = g_steal_pointer(&bearer);
++    }
++    nm_assert(ctx && ctx->cancellable == self->_priv.pending_connect);
++    g_clear_object(&self->_priv.pending_connect);
+ 
+     if (!self->_priv.bearer) {
+         if (g_error_matches(error, MM_MOBILE_EQUIPMENT_ERROR, MM_MOBILE_EQUIPMENT_ERROR_SIM_PIN)
+@@ -736,9 +749,17 @@
+         /* fall-through */
+ 
+     case CONNECT_STEP_CONNECT:
+-        if (!ctx->connect_properties)
++        if (!ctx->connect_properties || self->_priv.pending_connect
++            || self->_priv.disconnect_requests)
+             break;
+ 
++        /* A previous deactivation may have failed or been cancelled before
++         * releasing its bearer. Finish it before starting another activation. */
++        if (self->_priv.bearer) {
++            disconnect_bearer(self, TRUE, NULL, NULL, NULL);
++            break;
++        }
++
+         if (ctx->ip_types_i < ctx->ip_types->len) {
+             NMModemIPType current;
+ 
+@@ -763,11 +784,14 @@
+                   nm_modem_ip_type_to_string(current),
+                   ctx->ip_type_tries + 1);
+ 
++            /* Cancelling the D-Bus call would discard the only reply identifying
++             * our bearer. Keep the activation's cancellable to detect teardown. */
++            self->_priv.pending_connect = g_object_ref(ctx->cancellable);
+             mm_modem_simple_connect(self->_priv.simple_iface,
+                                     ctx->connect_properties,
+-                                    ctx->cancellable,
++                                    NULL,
+                                     (GAsyncReadyCallback) connect_ready,
+-                                    self);
++                                    g_object_ref(self));
+             break;
+         }
+ 
+@@ -1313,8 +1337,12 @@
+ static void
+ disconnect_context_complete(DisconnectContext *ctx, GError *error)
+ {
+-    if (ctx->callback)
+-        ctx->callback(NM_MODEM(ctx->self), error, ctx->callback_user_data);
++    if (ctx->callback) {
++        gs_free_error GError *cancelled = NULL;
++
++        g_cancellable_set_error_if_cancelled(ctx->cancellable, &cancelled);
++        ctx->callback(NM_MODEM(ctx->self), cancelled ?: error, ctx->callback_user_data);
++    }
+     nm_g_object_unref(ctx->cancellable);
+     g_object_unref(ctx->self);
+     g_slice_free(DisconnectContext, ctx);
+@@ -1323,65 +1351,91 @@
+ static void
+ disconnect_context_complete_on_idle(gpointer user_data, GCancellable *cancellable)
+ {
+-    DisconnectContext    *ctx             = user_data;
+-    gs_free_error GError *cancelled_error = NULL;
+-
+-    g_cancellable_set_error_if_cancelled(cancellable, &cancelled_error);
+-    disconnect_context_complete(ctx, cancelled_error);
++    disconnect_context_complete(user_data, NULL);
+ }
+ 
+ static void
+-simple_disconnect_ready(GObject *source_object, GAsyncResult *res, gpointer user_data)
++bearer_disconnect_ready(MMBearer *bearer, GAsyncResult *res, gpointer user_data)
+ {
+-    MMModemSimple        *modem_iface = MM_MODEM_SIMPLE(source_object);
+-    DisconnectContext    *ctx         = user_data;
+-    gs_free_error GError *error       = NULL;
+-
+-    if (!mm_modem_simple_disconnect_finish(modem_iface, res, &error)) {
+-        if (ctx->warn && !g_error_matches(error, G_DBUS_ERROR, G_DBUS_ERROR_SERVICE_UNKNOWN)) {
+-            NMModemBroadband *self = ctx->self;
+-
+-            _LOGW("failed to disconnect modem: %s", error->message);
+-        }
++    gs_unref_object NMModemBroadband *self  = user_data;
++    gs_free_error GError             *error = NULL;
++    GSList                           *requests;
++    GSList                           *iter;
++
++    nm_assert(bearer == self->_priv.bearer);
++    if (mm_bearer_disconnect_finish(bearer, res, &error) || !mm_bearer_get_connected(bearer)
++        || g_error_matches(error, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_OBJECT)
++        || g_error_matches(error, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_METHOD)
++        || g_error_matches(error, G_DBUS_ERROR, G_DBUS_ERROR_SERVICE_UNKNOWN)) {
++        g_clear_object(&self->_priv.bearer);
++        g_clear_error(&error);
+     }
+ 
+-    disconnect_context_complete(ctx, error);
++    requests = g_steal_pointer(&self->_priv.disconnect_requests);
++    for (iter = requests; iter; iter = iter->next) {
++        DisconnectContext *ctx = iter->data;
++
++        if (error && ctx->warn)
++            _LOGW("failed to disconnect bearer %s: %s", mm_bearer_get_path(bearer), error->message);
++        disconnect_context_complete(ctx, error);
++    }
++    g_slist_free(requests);
++
++    if (self->_priv.ctx && self->_priv.ctx->step == CONNECT_STEP_CONNECT
++        && !self->_priv.disconnect_requests) {
++        if (error) {
++            connect_context_clear(self);
++            nm_modem_emit_prepare_result(NM_MODEM(self), FALSE, translate_mm_error(self, error));
++        } else
++            connect_context_step(self);
++    }
+ }
+ 
+ static void
+-disconnect(NMModem                   *modem,
+-           gboolean                   warn,
+-           GCancellable              *cancellable,
+-           _NMModemDisconnectCallback callback,
+-           gpointer                   user_data)
++disconnect_bearer(NMModemBroadband          *self,
++                  gboolean                   warn,
++                  GCancellable              *cancellable,
++                  _NMModemDisconnectCallback callback,
++                  gpointer                   user_data)
+ {
+-    NMModemBroadband  *self = NM_MODEM_BROADBAND(modem);
+-    DisconnectContext *ctx;
+-
+-    connect_context_clear(self);
+-    _nm_modem_set_apn(NM_MODEM(self), NULL);
++    DisconnectContext *ctx = g_slice_new0(DisconnectContext);
+ 
+-    ctx                     = g_slice_new0(DisconnectContext);
+     ctx->self               = g_object_ref(self);
+     ctx->cancellable        = nm_g_object_ref(cancellable);
+     ctx->callback           = callback;
+     ctx->callback_user_data = user_data;
++    ctx->warn               = warn;
+ 
+-    /* Don't bother warning on FAILED since the modem is already gone */
+-    ctx->warn = warn;
+-
+-    /* Already cancelled or no simple-iface? We are done. */
+-    if (!ctx->self->_priv.simple_iface || g_cancellable_is_cancelled(cancellable)) {
++    if (!self->_priv.bearer) {
+         nm_utils_invoke_on_idle(cancellable, disconnect_context_complete_on_idle, ctx);
+         return;
+     }
+ 
+-    _LOGD("notifying ModemManager about the modem disconnection");
+-    mm_modem_simple_disconnect(self->_priv.simple_iface,
+-                               NULL, /* bearer path; if NULL given ALL get disconnected */
+-                               cancellable,
+-                               simple_disconnect_ready,
+-                               ctx);
++    self->_priv.disconnect_requests = g_slist_prepend(self->_priv.disconnect_requests, ctx);
++    if (self->_priv.disconnect_requests->next)
++        return;
++
++    /* IP cleanup has already started. Finish the remote disconnect even
++     * if a caller stops waiting for it, then release the owned bearer. */
++    _LOGD("disconnecting bearer %s", mm_bearer_get_path(self->_priv.bearer));
++    mm_bearer_disconnect(self->_priv.bearer,
++                         NULL,
++                         (GAsyncReadyCallback) bearer_disconnect_ready,
++                         g_object_ref(self));
++}
++
++static void
++disconnect(NMModem                   *modem,
++           gboolean                   warn,
++           GCancellable              *cancellable,
++           _NMModemDisconnectCallback callback,
++           gpointer                   user_data)
++{
++    NMModemBroadband *self = NM_MODEM_BROADBAND(modem);
++
++    connect_context_clear(self);
++    _nm_modem_set_apn(modem, NULL);
++    disconnect_bearer(self, warn, cancellable, callback, user_data);
+ }
+ 
+ /*****************************************************************************/
+@@ -1391,12 +1445,9 @@
+ {
+     NMModemBroadband *self = NM_MODEM_BROADBAND(modem);
+ 
+-    /* TODO: cancel SimpleConnect() if any */
+-
+     /* Cleanup IPv4 addresses and routes */
+     g_clear_object(&self->_priv.ipv4_config);
+     g_clear_object(&self->_priv.ipv6_config);
+-    g_clear_object(&self->_priv.bearer);
+ 
+     self->_priv.pin_tries = 0;
+ 

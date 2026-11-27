@@ -1,3 +1,10 @@
+marble-device-support (1.0.0-29) unstable; urgency=medium
+
+  * Use ModemManager's quick suspend/resume mode to retain the integrated
+    modem and refresh its network state after waking from suspend-to-idle.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 12:30:00 +0800
+
 marble-device-support (1.0.0-27) unstable; urgency=medium
 
   * Provide portrait V4L2 outputs for the ultrawide, front and macro cameras.

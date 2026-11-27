@@ -1,0 +1,6 @@
+network-manager (1.58.1-1+marble1) unstable; urgency=medium
+
+  * Disconnect only the WWAN bearer acquired by NetworkManager. Preserve
+    the IMS connection used for calls and SMS when mobile data stops.
+
+ -- GhfunNiHe <131235947+GhfunNiHe@users.noreply.github.com>  Fri, 27 Nov 2026 12:40:00 +0800
