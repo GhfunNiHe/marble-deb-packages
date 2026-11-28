@@ -155,8 +155,6 @@ jobs:
             libva-dev libdrm-dev libegl-dev libgles-dev libgbm-dev \
             libvulkan-dev ffmpeg
 
-      # ModemManager requires libmbim 1.32; build it from the Debian source
-      # for this build environment only. The DEBs stay out of the release.
       - name: Build libmbim for ModemManager
         run: |
           apt-get install -y --no-install-recommends meson gobject-introspection
