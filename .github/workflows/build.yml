@@ -155,39 +155,25 @@ jobs:
             libva-dev libdrm-dev libegl-dev libgles-dev libgbm-dev \
             libvulkan-dev ffmpeg
 
-      # Noble's archive is below ModemManager's 1.32 floor. Take the
-      # unmodified libmbim build from the dedicated release; keep it in
-      # $RUNNER_TEMP so those debs never enter the device release.
-      - name: Install libmbim from ubuntu-noble
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # ModemManager requires libmbim 1.32; build it from the Debian source
+      # for this build environment only. The DEBs stay out of the release.
+      - name: Build libmbim for ModemManager
         run: |
-          mkdir -p "$RUNNER_TEMP/noble-deps"
-          python3 - <<'PY' > "$RUNNER_TEMP/noble-deps/urls"
-          import json
-          import os
-          import urllib.request
-
-          api = "https://api.github.com/repos/GhfunNiHe/marble-deb-packages/releases/tags/ubuntu-noble"
-          headers = {}
-          token = os.environ.get("GH_TOKEN")
-          if token:
-              headers["Authorization"] = f"Bearer {token}"
-          request = urllib.request.Request(api, headers=headers)
-          with urllib.request.urlopen(request) as response:
-              assets = json.load(response)["assets"]
-          for asset in assets:
-              name = asset["name"]
-              if not name.endswith("_arm64.deb") or "-dbgsym" in name:
-                  continue
-              if not (name.startswith("libmbim-") or name.startswith("gir1.2-mbim-")):
-                  continue
-              print(asset["browser_download_url"])
-          PY
-          while IFS= read -r url; do
-            wget -q -c --tries=5 --timeout=30 -P "$RUNNER_TEMP/noble-deps" "$url"
-          done < "$RUNNER_TEMP/noble-deps/urls"
-          apt-get install -y "$RUNNER_TEMP"/noble-deps/*.deb
+          set -euo pipefail
+          apt-get install -y --no-install-recommends meson gobject-introspection
+          mkdir -p "$RUNNER_TEMP/libmbim"
+          cd "$RUNNER_TEMP/libmbim"
+          for f in \
+            libmbim_1.32.0-1.dsc \
+            libmbim_1.32.0.orig.tar.xz \
+            libmbim_1.32.0-1.debian.tar.xz; do
+            wget -q -O "$f" "https://deb.debian.org/debian/pool/main/libm/libmbim/$f"
+          done
+          dpkg-source -x libmbim_1.32.0-1.dsc src
+          cd src
+          DEB_BUILD_PROFILES=nodoc dpkg-buildpackage -b -us -uc
+          apt-get install -y ../libmbim-glib4_*.deb ../libmbim-glib-dev_*.deb \
+            ../libmbim-proxy_*.deb ../libmbim-utils_*.deb ../gir1.2-mbim-*.deb
           dpkg-query -W -f='${Package} ${Version}\n' libmbim-glib4 libmbim-glib-dev
 
       # noble has meson 1.3.2, libssc needs >= 1.4.0: build 1.4.2 as a dpkg-registered package.
