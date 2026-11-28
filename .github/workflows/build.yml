@@ -158,9 +158,7 @@ jobs:
       # ModemManager requires libmbim 1.32; build it from the Debian source
       # for this build environment only. The DEBs stay out of the release.
       - name: Build libmbim for ModemManager
-        shell: bash
         run: |
-          set -euo pipefail
           apt-get install -y --no-install-recommends meson gobject-introspection
           mkdir -p "$RUNNER_TEMP/libmbim"
           cd "$RUNNER_TEMP/libmbim"
