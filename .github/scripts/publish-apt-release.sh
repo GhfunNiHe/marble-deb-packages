@@ -4,7 +4,6 @@
 # The archive holds one version of each package: the previous asset for a
 # package name is deleted before the new build is uploaded. RootFS CI pulls
 # every asset from this tag.
-set -euo pipefail
 
 tag=apt
 repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
